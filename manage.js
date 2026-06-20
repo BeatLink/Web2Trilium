@@ -1,161 +1,161 @@
 // manage.js
 
-let config = null;
-let client = null;
+let config = null
+let client = null
 
-const treeEl = document.getElementById("tree");
-const searchEl = document.getElementById("search");
-const bannerEl = document.getElementById("banner");
+const treeEl = document.getElementById("tree")
+const searchEl = document.getElementById("search")
+const bannerEl = document.getElementById("banner")
 
 function showBanner(message, level) {
-  bannerEl.textContent = message;
-  bannerEl.className = level || "";
+  bannerEl.textContent = message
+  bannerEl.className = level || ""
 }
 
 function clearBanner() {
-  bannerEl.textContent = "";
-  bannerEl.className = "";
+  bannerEl.textContent = ""
+  bannerEl.className = ""
 }
 
 async function loadConfig() {
-  const { config: c } = await browser.storage.local.get("config");
-  config = c || {};
+  const { config: c } = await browser.storage.local.get("config")
+  config = c || {}
   if (config.token && config.baseUrl) {
-    client = new TriliumClient(config.baseUrl, config.token);
+    client = new TriliumClient(config.baseUrl, config.token)
   }
 }
 
 function svgFavicon() {
-  return `<svg class="favicon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#bbb"/></svg>`;
+  return `<svg class="favicon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#bbb"/></svg>`
 }
 
 function makeBookmarkRow(node) {
-  const row = document.createElement("div");
-  row.className = "bookmark-row";
-  row.dataset.id = node.id;
+  const row = document.createElement("div")
+  row.className = "bookmark-row"
+  row.dataset.id = node.id
 
-  const text = document.createElement("div");
-  text.className = "bm-text";
+  const text = document.createElement("div")
+  text.className = "bm-text"
   text.innerHTML = `
     <div class="bm-title">${escapeHtml(node.title || node.url)}</div>
     <div class="bm-url">${escapeHtml(node.url)}</div>
-  `;
+  `
 
-  const btn = document.createElement("button");
-  btn.className = "save-btn";
-  btn.textContent = "Save to Inbox";
-  btn.addEventListener("click", () => saveAndRemove(node, btn, row));
+  const btn = document.createElement("button")
+  btn.className = "save-btn"
+  btn.textContent = "Save to Inbox"
+  btn.addEventListener("click", () => saveAndRemove(node, btn, row))
 
-  row.innerHTML = svgFavicon();
-  row.appendChild(text);
-  row.appendChild(btn);
-  return row;
+  row.innerHTML = svgFavicon()
+  row.appendChild(text)
+  row.appendChild(btn)
+  return row
 }
 
 function makeFolderNode(node) {
-  const wrap = document.createElement("div");
-  wrap.className = "folder";
+  const wrap = document.createElement("div")
+  wrap.className = "folder"
 
-  const header = document.createElement("div");
-  header.className = "folder-header";
-  header.innerHTML = `<span class="twisty">▾</span><span>${escapeHtml(node.title || "(unnamed)")}</span>`;
+  const header = document.createElement("div")
+  header.className = "folder-header"
+  header.innerHTML = `<span class="twisty">▾</span><span>${escapeHtml(node.title || "(unnamed)")}</span>`
 
-  const childrenEl = document.createElement("div");
-  childrenEl.className = "folder-children";
+  const childrenEl = document.createElement("div")
+  childrenEl.className = "folder-children"
 
   header.addEventListener("click", () => {
-    header.classList.toggle("collapsed");
-    childrenEl.classList.toggle("collapsed");
-  });
+    header.classList.toggle("collapsed")
+    childrenEl.classList.toggle("collapsed")
+  })
 
-  wrap.appendChild(header);
+  wrap.appendChild(header)
   wrap.appendChild(childrenEl);
 
   (node.children || []).forEach((child) => {
-    const childEl = renderNode(child);
-    if (childEl) childrenEl.appendChild(childEl);
-  });
+    const childEl = renderNode(child)
+    if (childEl) childrenEl.appendChild(childEl)
+  })
 
-  return childrenEl.children.length > 0 ? wrap : null;
+  return childrenEl.children.length > 0 ? wrap : null
 }
 
 function renderNode(node) {
-  if (node.type === "separator") return null;
-  if (node.url) return makeBookmarkRow(node);
-  if (node.children) return makeFolderNode(node);
-  return null;
+  if (node.type === "separator") return null
+  if (node.url) return makeBookmarkRow(node)
+  if (node.children) return makeFolderNode(node)
+  return null
 }
 
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str || "";
-  return div.innerHTML;
+  const div = document.createElement("div")
+  div.textContent = str || ""
+  return div.innerHTML
 }
 
 async function renderTree() {
-  treeEl.innerHTML = "";
-  const tree = await browser.bookmarks.getTree();
-  const roots = tree[0].children || [];
+  treeEl.innerHTML = ""
+  const tree = await browser.bookmarks.getTree()
+  const roots = tree[0].children || []
 
-  let any = false;
+  let any = false
   for (const root of roots) {
-    const el = renderNode(root);
+    const el = renderNode(root)
     if (el) {
-      treeEl.appendChild(el);
-      any = true;
+      treeEl.appendChild(el)
+      any = true
     }
   }
   if (!any) {
-    treeEl.innerHTML = `<div class="empty-state">No bookmarks found.</div>`;
+    treeEl.innerHTML = `<div class="empty-state">No bookmarks found.</div>`
   }
 }
 
 function applyFilter() {
-  const q = searchEl.value.trim().toLowerCase();
-  const rows = treeEl.querySelectorAll(".bookmark-row");
-  const folders = treeEl.querySelectorAll(".folder");
+  const q = searchEl.value.trim().toLowerCase()
+  const rows = treeEl.querySelectorAll(".bookmark-row")
+  const folders = treeEl.querySelectorAll(".folder")
 
   if (!q) {
-    rows.forEach((r) => (r.style.display = ""));
-    folders.forEach((f) => (f.style.display = ""));
-    return;
+    rows.forEach((r) => (r.style.display = ""))
+    folders.forEach((f) => (f.style.display = ""))
+    return
   }
 
   rows.forEach((r) => {
-    const title = r.querySelector(".bm-title").textContent.toLowerCase();
-    const url = r.querySelector(".bm-url").textContent.toLowerCase();
-    r.style.display = title.includes(q) || url.includes(q) ? "" : "none";
-  });
+    const title = r.querySelector(".bm-title").textContent.toLowerCase()
+    const url = r.querySelector(".bm-url").textContent.toLowerCase()
+    r.style.display = title.includes(q) || url.includes(q) ? "" : "none"
+  })
 
   // Hide folders with no visible bookmark rows
   folders.forEach((folder) => {
     const visibleRow = Array.from(folder.querySelectorAll(".bookmark-row")).some(
       (r) => r.style.display !== "none"
-    );
-    folder.style.display = visibleRow ? "" : "none";
+    )
+    folder.style.display = visibleRow ? "" : "none"
     if (visibleRow) {
-      const header = folder.querySelector(".folder-header");
-      const children = folder.querySelector(".folder-children");
-      header.classList.remove("collapsed");
-      children.classList.remove("collapsed");
+      const header = folder.querySelector(".folder-header")
+      const children = folder.querySelector(".folder-children")
+      header.classList.remove("collapsed")
+      children.classList.remove("collapsed")
     }
-  });
+  })
 }
 
 async function saveAndRemove(node, btn, row) {
-  clearBanner();
+  clearBanner()
 
   if (!config.token || !config.baseUrl) {
-    showBanner("Set up your Trilium server URL and ETAPI token in Settings first.", "err");
-    return;
+    showBanner("Set up your Trilium server URL and ETAPI token in Settings first.", "err")
+    return
   }
   if (!config.inboxNoteId) {
-    showBanner("Set your Trilium Inbox note ID in Settings first.", "err");
-    return;
+    showBanner("Set your Trilium Inbox note ID in Settings first.", "err")
+    return
   }
 
-  btn.disabled = true;
-  btn.textContent = "Saving…";
+  btn.disabled = true
+  btn.textContent = "Saving…"
 
   try {
     const note = await client.createNote({
@@ -163,65 +163,92 @@ async function saveAndRemove(node, btn, row) {
       title: node.title || node.url,
       type: "webView",
       content: ""
-    });
+    })
     await client.createAttribute({
       noteId: note.note.noteId,
       type: "label",
       name: "webViewSrc",
       value: node.url
-    });
+    })
     await client.createAttribute({
       noteId: note.note.noteId,
       type: "label",
       name: "url",
       value: node.url
-    });
+    })
 
-    await browser.bookmarks.remove(node.id);
+    await browser.bookmarks.remove(node.id)
 
-    btn.textContent = "Saved ✓";
-    btn.classList.add("done");
-    row.style.opacity = "0.5";
+    btn.textContent = "Saved ✓"
+    btn.classList.add("done")
+    row.style.opacity = "0.5"
     setTimeout(() => {
-      row.remove();
-      pruneEmptyFolders();
-    }, 500);
+      row.remove()
+      pruneEmptyFolders()
+    }, 500)
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "Retry";
-    btn.classList.add("fail");
-    showBanner(`Failed to save "${node.title || node.url}": ${err.message}`, "err");
+    btn.disabled = false
+    btn.textContent = "Retry"
+    btn.classList.add("fail")
+    showBanner(`Failed to save "${node.title || node.url}": ${err.message}`, "err")
   }
 }
 
+
+
+document.getElementById("refresh").addEventListener("click", async () => {
+  await loadConfig()
+  await renderTree()
+})
+
+document.getElementById("openOptions").addEventListener("click", () => {
+  browser.runtime.openOptionsPage()
+})
+
+function isInSidebar() {
+  const sidebarViews = browser.extension.getViews({ type: "sidebar" })
+  return sidebarViews.includes(window)
+}
+
+const toggleBtn = document.getElementById("toggleSidebar")
+toggleBtn.textContent = isInSidebar() ? "Open in Tab" : "Open in Sidebar"
+toggleBtn.addEventListener("click", async () => {
+  if (isInSidebar()) {
+    await browser.tabs.create({ url: browser.runtime.getURL("manage.html") })
+  } else {
+    await browser.sidebarAction.open()
+  }
+})
+
+
 function pruneEmptyFolders() {
-  const folders = treeEl.querySelectorAll(".folder");
+  const folders = treeEl.querySelectorAll(".folder")
   folders.forEach((folder) => {
-    const childrenEl = folder.querySelector(".folder-children");
+    const childrenEl = folder.querySelector(".folder-children")
     if (childrenEl && childrenEl.children.length === 0) {
-      folder.remove();
+      folder.remove()
     }
-  });
+  })
 }
 
 document.getElementById("refresh").addEventListener("click", async () => {
-  await loadConfig();
-  await renderTree();
-});
+  await loadConfig()
+  await renderTree()
+})
 
 document.getElementById("openOptions").addEventListener("click", () => {
-  browser.runtime.openOptionsPage();
-});
+  browser.runtime.openOptionsPage()
+})
 
 searchEl.addEventListener("input", applyFilter);
 
 (async function init() {
-  await loadConfig();
+  await loadConfig()
   if (!config.token || !config.inboxNoteId) {
     showBanner(
       "Heads up: finish setup in Settings (ETAPI token + Inbox note ID) before saving bookmarks.",
       "warn"
-    );
+    )
   }
-  await renderTree();
-})();
+  await renderTree()
+})()
