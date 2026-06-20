@@ -196,14 +196,9 @@ async function saveAndRemove(node, btn, row) {
 
 
 
-document.getElementById("refresh").addEventListener("click", async () => {
-  await loadConfig()
-  await renderTree()
-})
 
-document.getElementById("openOptions").addEventListener("click", () => {
-  browser.runtime.openOptionsPage()
-})
+
+
 
 function isInSidebar() {
   const sidebarViews = browser.extension.getViews({ type: "sidebar" })
