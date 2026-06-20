@@ -4,6 +4,7 @@ let config = null
 let client = null
 
 const treeEl = document.getElementById("tree")
+const tabsTreeEl = document.getElementById("tabsTree")
 const searchEl = document.getElementById("search")
 const bannerEl = document.getElementById("banner")
 
@@ -47,16 +48,51 @@ function makeBookmarkRow(node) {
   const saveBtn = document.createElement("button")
   saveBtn.className = "save-btn"
   saveBtn.textContent = "Save to Inbox"
-  saveBtn.addEventListener("click", () => saveAndRemove(node, saveBtn, deleteBtn, row))
+  saveBtn.addEventListener("click", () => saveBookmarkAndRemove(node, saveBtn, deleteBtn, row))
 
   const deleteBtn = document.createElement("button")
   deleteBtn.className = "delete-btn"
   deleteBtn.textContent = "Delete"
   deleteBtn.title = "Delete this bookmark from Firefox without saving it to Trilium"
-  deleteBtn.addEventListener("click", () => deleteOnly(node, deleteBtn, saveBtn, row))
+  deleteBtn.addEventListener("click", () => deleteBookmarkOnly(node, deleteBtn, saveBtn, row))
 
   actions.appendChild(saveBtn)
   actions.appendChild(deleteBtn)
+
+  row.innerHTML = svgFavicon()
+  row.appendChild(text)
+  row.appendChild(actions)
+  return row
+}
+
+function makeTabRow(tab) {
+  const row = document.createElement("div")
+  row.className = "bookmark-row"
+  row.dataset.id = tab.id
+
+  const text = document.createElement("div")
+  text.className = "bm-text"
+  text.innerHTML = `
+    <div class="bm-title">${escapeHtml(tab.title || tab.url)}</div>
+    <div class="bm-url">${escapeHtml(tab.url)}</div>
+  `
+
+  const actions = document.createElement("div")
+  actions.className = "bm-actions"
+
+  const saveBtn = document.createElement("button")
+  saveBtn.className = "save-btn"
+  saveBtn.textContent = "Save to Inbox"
+  saveBtn.addEventListener("click", () => saveTabAndClose(tab, saveBtn, closeBtn, row))
+
+  const closeBtn = document.createElement("button")
+  closeBtn.className = "delete-btn"
+  closeBtn.textContent = "Close"
+  closeBtn.title = "Close this tab without saving it to Trilium"
+  closeBtn.addEventListener("click", () => closeTabOnly(tab, closeBtn, saveBtn, row))
+
+  actions.appendChild(saveBtn)
+  actions.appendChild(closeBtn)
 
   row.innerHTML = svgFavicon()
   row.appendChild(text)
@@ -122,22 +158,43 @@ async function renderTree() {
   }
 }
 
+async function renderTabs() {
+  tabsTreeEl.innerHTML = ""
+  const ownUrl = browser.runtime.getURL("manage.html")
+  const tabs = await browser.tabs.query({})
+  const visibleTabs = tabs.filter((t) => t.url && t.url !== ownUrl)
+
+  if (visibleTabs.length === 0) {
+    tabsTreeEl.innerHTML = `<div class="empty-state">No open tabs.</div>`
+    return
+  }
+
+  visibleTabs.forEach((tab) => {
+    tabsTreeEl.appendChild(makeTabRow(tab))
+  })
+}
+
 function applyFilter() {
   const q = searchEl.value.trim().toLowerCase()
   const rows = treeEl.querySelectorAll(".bookmark-row")
   const folders = treeEl.querySelectorAll(".folder")
+  const tabRows = tabsTreeEl.querySelectorAll(".bookmark-row")
 
   if (!q) {
     rows.forEach((r) => (r.style.display = ""))
     folders.forEach((f) => (f.style.display = ""))
+    tabRows.forEach((r) => (r.style.display = ""))
     return
   }
 
-  rows.forEach((r) => {
+  const matches = (r) => {
     const title = r.querySelector(".bm-title").textContent.toLowerCase()
     const url = r.querySelector(".bm-url").textContent.toLowerCase()
-    r.style.display = title.includes(q) || url.includes(q) ? "" : "none"
-  })
+    return title.includes(q) || url.includes(q)
+  }
+
+  rows.forEach((r) => (r.style.display = matches(r) ? "" : "none"))
+  tabRows.forEach((r) => (r.style.display = matches(r) ? "" : "none"))
 
   // Hide folders with no visible bookmark rows
   folders.forEach((folder) => {
@@ -154,17 +211,40 @@ function applyFilter() {
   })
 }
 
-async function saveAndRemove(node, btn, siblingBtn, row) {
-  clearBanner()
-
+// Creates a Web View note under Trilium's Inbox for the given title/url.
+// Throws on failure (config missing, request failure, etc). Shared by both
+// the bookmark-saving and tab-saving flows.
+async function saveUrlToInboxNote(title, url) {
   if (!config.token || !config.baseUrl) {
-    showBanner("Set up your Trilium server URL and ETAPI token in Settings first.", "err")
-    return
+    throw new Error("Set up your Trilium server URL and ETAPI token in Settings first.")
   }
   if (!config.inboxNoteId) {
-    showBanner("Set your Trilium Inbox note ID in Settings first.", "err")
-    return
+    throw new Error("Set your Trilium Inbox note ID in Settings first.")
   }
+
+  const note = await client.createNote({
+    parentNoteId: config.inboxNoteId,
+    title: title || url,
+    type: "webView",
+    content: ""
+  })
+  await client.createAttribute({
+    noteId: note.note.noteId,
+    type: "label",
+    name: "webViewSrc",
+    value: url
+  })
+  await client.createAttribute({
+    noteId: note.note.noteId,
+    type: "label",
+    name: "url",
+    value: url
+  })
+  return note.note.noteId
+}
+
+async function saveBookmarkAndRemove(node, btn, siblingBtn, row) {
+  clearBanner()
 
   btn.disabled = true
   siblingBtn.disabled = true
@@ -172,25 +252,7 @@ async function saveAndRemove(node, btn, siblingBtn, row) {
   btn.textContent = "Saving…"
 
   try {
-    const note = await client.createNote({
-      parentNoteId: config.inboxNoteId,
-      title: node.title || node.url,
-      type: "webView",
-      content: ""
-    })
-    await client.createAttribute({
-      noteId: note.note.noteId,
-      type: "label",
-      name: "webViewSrc",
-      value: node.url
-    })
-    await client.createAttribute({
-      noteId: note.note.noteId,
-      type: "label",
-      name: "url",
-      value: node.url
-    })
-
+    await saveUrlToInboxNote(node.title, node.url)
     await browser.bookmarks.remove(node.id)
 
     btn.textContent = "Saved ✓"
@@ -209,7 +271,7 @@ async function saveAndRemove(node, btn, siblingBtn, row) {
   }
 }
 
-async function deleteOnly(node, btn, siblingBtn, row) {
+async function deleteBookmarkOnly(node, btn, siblingBtn, row) {
   clearBanner()
 
   const ok = window.confirm(
@@ -236,6 +298,50 @@ async function deleteOnly(node, btn, siblingBtn, row) {
   }
 }
 
+async function saveTabAndClose(tab, btn, siblingBtn, row) {
+  clearBanner()
+
+  btn.disabled = true
+  siblingBtn.disabled = true
+  btn.classList.remove("fail")
+  btn.textContent = "Saving…"
+
+  try {
+    await saveUrlToInboxNote(tab.title, tab.url)
+    await browser.tabs.remove(tab.id)
+
+    btn.textContent = "Saved ✓"
+    btn.classList.add("done")
+    row.style.opacity = "0.5"
+    setTimeout(() => row.remove(), 500)
+  } catch (err) {
+    btn.disabled = false
+    siblingBtn.disabled = false
+    btn.textContent = "Retry"
+    btn.classList.add("fail")
+    showBanner(`Failed to save "${tab.title || tab.url}": ${err.message}`, "err")
+  }
+}
+
+async function closeTabOnly(tab, btn, siblingBtn, row) {
+  clearBanner()
+
+  btn.disabled = true
+  siblingBtn.disabled = true
+  btn.textContent = "Closing…"
+
+  try {
+    await browser.tabs.remove(tab.id)
+    row.style.opacity = "0.5"
+    setTimeout(() => row.remove(), 300)
+  } catch (err) {
+    btn.disabled = false
+    siblingBtn.disabled = false
+    btn.textContent = "Close"
+    showBanner(`Failed to close "${tab.title || tab.url}": ${err.message}`, "err")
+  }
+}
+
 function pruneEmptyFolders() {
   const folders = treeEl.querySelectorAll(".folder")
   folders.forEach((folder) => {
@@ -249,6 +355,7 @@ function pruneEmptyFolders() {
 document.getElementById("refresh").addEventListener("click", async () => {
   await loadConfig()
   await renderTree()
+  await renderTabs()
 })
 
 document.getElementById("openOptions").addEventListener("click", () => {
@@ -281,4 +388,5 @@ searchEl.addEventListener("input", applyFilter);
     )
   }
   await renderTree()
+  await renderTabs()
 })()

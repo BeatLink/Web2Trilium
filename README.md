@@ -1,13 +1,9 @@
 # Trilium Inbox Saver (Firefox extension)
 
-A page listing all your Firefox bookmarks and folders. Click "Save to
-Inbox" next to any bookmark and it:
-
-1. Creates a **Web View** note for it under your Trilium Inbox note (via
-   ETAPI), with the URL set as the `#webViewSrc` label (so opening the note
-   later renders the live page inline, matching the
-   `webViewToolbarWidget.js` setup) plus a `#url` label for searchability.
-2. Deletes the bookmark from Firefox.
+A page listing all your Firefox bookmarks/folders and your open tabs.
+For bookmarks, click "Save to Inbox" or "Delete". For open tabs, click
+"Save to Inbox" (saves the tab's current URL to Trilium, then closes the
+tab) or "Close" (just closes the tab, no Trilium involved).
 
 No background sync, no two-way logic — just a one-way "move" action,
 triggered manually per bookmark.
@@ -38,14 +34,21 @@ triggered manually per bookmark.
 
 ## Notes
 
-- Saved notes are created as type **Web View**, matching the
-  `webViewToolbarWidget.js` setup — if you've also installed that widget,
-  saved bookmarks immediately get the Back/Forward/Save/Open-in-Browser
+- Saving (bookmark or tab) creates a note as type **Web View**, matching
+  the `webViewToolbarWidget.js` setup — if you've also installed that
+  widget, saved items immediately get the Back/Forward/Save/Open-in-Browser
   toolbar when opened in Trilium. If ETAPI in your Trilium version
   rejects `type: "webView"` (some versions restrict which note types are
   creatable over the REST API), you'll see the failure in the on-page
   banner — let me know and I'll switch it back to a plain text note with a
   link, or check your version's ETAPI docs for the accepted type list.
+- This now requests the **`tabs`** permission (in addition to `bookmarks`
+  and `storage`) so it can list and close open tabs. Firefox will show
+  this as an extra permission prompt on reinstall/update — it's only used
+  to read tab title/URL and close tabs, nothing else.
+- The "Open Tabs" list excludes the manager page itself, but if you have
+  it open in two tabs/windows at once, each instance still shows up in
+  the other's list — closing one from there will close that tab.
 - The toolbar icon click always opens the bookmark manager (popup or full
   tab depending on your sidebar/browser_action setup) since the list can
   be long.

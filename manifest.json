@@ -9,12 +9,15 @@
   },
   "permissions": [
     "bookmarks",
+    "tabs",
     "storage",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "browser_action": {
     "default_icon": "icons/icon-48.png",
