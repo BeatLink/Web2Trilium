@@ -41,14 +41,26 @@ function makeBookmarkRow(node) {
     <div class="bm-url">${escapeHtml(node.url)}</div>
   `
 
-  const btn = document.createElement("button")
-  btn.className = "save-btn"
-  btn.textContent = "Save to Inbox"
-  btn.addEventListener("click", () => saveAndRemove(node, btn, row))
+  const actions = document.createElement("div")
+  actions.className = "bm-actions"
+
+  const saveBtn = document.createElement("button")
+  saveBtn.className = "save-btn"
+  saveBtn.textContent = "Save to Inbox"
+  saveBtn.addEventListener("click", () => saveAndRemove(node, saveBtn, deleteBtn, row))
+
+  const deleteBtn = document.createElement("button")
+  deleteBtn.className = "delete-btn"
+  deleteBtn.textContent = "Delete"
+  deleteBtn.title = "Delete this bookmark from Firefox without saving it to Trilium"
+  deleteBtn.addEventListener("click", () => deleteOnly(node, deleteBtn, saveBtn, row))
+
+  actions.appendChild(saveBtn)
+  actions.appendChild(deleteBtn)
 
   row.innerHTML = svgFavicon()
   row.appendChild(text)
-  row.appendChild(btn)
+  row.appendChild(actions)
   return row
 }
 
@@ -142,7 +154,7 @@ function applyFilter() {
   })
 }
 
-async function saveAndRemove(node, btn, row) {
+async function saveAndRemove(node, btn, siblingBtn, row) {
   clearBanner()
 
   if (!config.token || !config.baseUrl) {
@@ -155,6 +167,8 @@ async function saveAndRemove(node, btn, row) {
   }
 
   btn.disabled = true
+  siblingBtn.disabled = true
+  btn.classList.remove("fail")
   btn.textContent = "Saving…"
 
   try {
@@ -188,33 +202,39 @@ async function saveAndRemove(node, btn, row) {
     }, 500)
   } catch (err) {
     btn.disabled = false
+    siblingBtn.disabled = false
     btn.textContent = "Retry"
     btn.classList.add("fail")
     showBanner(`Failed to save "${node.title || node.url}": ${err.message}`, "err")
   }
 }
 
+async function deleteOnly(node, btn, siblingBtn, row) {
+  clearBanner()
 
+  const ok = window.confirm(
+    `Delete "${node.title || node.url}" from Firefox without saving it to Trilium?\n\nThis can't be undone from this page.`
+  )
+  if (!ok) return
 
+  btn.disabled = true
+  siblingBtn.disabled = true
+  btn.textContent = "Deleting…"
 
-
-
-
-function isInSidebar() {
-  const sidebarViews = browser.extension.getViews({ type: "sidebar" })
-  return sidebarViews.includes(window)
-}
-
-const toggleBtn = document.getElementById("toggleSidebar")
-toggleBtn.textContent = isInSidebar() ? "Open in Tab" : "Open in Sidebar"
-toggleBtn.addEventListener("click", async () => {
-  if (isInSidebar()) {
-    await browser.tabs.create({ url: browser.runtime.getURL("manage.html") })
-  } else {
-    await browser.sidebarAction.open()
+  try {
+    await browser.bookmarks.remove(node.id)
+    row.style.opacity = "0.5"
+    setTimeout(() => {
+      row.remove()
+      pruneEmptyFolders()
+    }, 300)
+  } catch (err) {
+    btn.disabled = false
+    siblingBtn.disabled = false
+    btn.textContent = "Delete"
+    showBanner(`Failed to delete "${node.title || node.url}": ${err.message}`, "err")
   }
-})
-
+}
 
 function pruneEmptyFolders() {
   const folders = treeEl.querySelectorAll(".folder")
@@ -233,6 +253,21 @@ document.getElementById("refresh").addEventListener("click", async () => {
 
 document.getElementById("openOptions").addEventListener("click", () => {
   browser.runtime.openOptionsPage()
+})
+
+function isInSidebar() {
+  const sidebarViews = browser.extension.getViews({ type: "sidebar" })
+  return sidebarViews.includes(window)
+}
+
+const toggleBtn = document.getElementById("toggleSidebar")
+toggleBtn.textContent = isInSidebar() ? "Open in Tab" : "Open in Sidebar"
+toggleBtn.addEventListener("click", async () => {
+  if (isInSidebar()) {
+    await browser.tabs.create({ url: browser.runtime.getURL("manage.html") })
+  } else {
+    await browser.sidebarAction.open()
+  }
 })
 
 searchEl.addEventListener("input", applyFilter);

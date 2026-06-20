@@ -1,4 +1,4 @@
-
+# Trilium Inbox Saver (Firefox extension)
 
 A page listing all your Firefox bookmarks and folders. Click "Save to
 Inbox" next to any bookmark and it:
