@@ -1,0 +1,38 @@
+{
+  "manifest_version": 2,
+  "name": "Trilium Inbox Saver",
+  "version": "1.0.0",
+  "description": "Browse your Firefox bookmarks and send any of them to Trilium's Inbox with one click, removing it from Firefox.",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_action": {
+    "default_icon": "icons/icon-48.png",
+    "default_title": "Open Trilium Inbox Saver"
+  },
+  "sidebar_action": {
+    "default_panel": "manage.html",
+    "default_icon": "icons/icon-48.png",
+    "default_title": "Trilium Inbox Saver"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "trilium-inbox-saver@local",
+      "strict_min_version": "109.0"
+    }
+  }
+}
