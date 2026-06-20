@@ -1,7 +1,4 @@
-# Web2Trilium
-A Firefox Extension that allows you to quickly save Webpages in bookmarks and open tabs to trilium
 
-# Trilium Inbox Saver (Firefox extension)
 
 A page listing all your Firefox bookmarks and folders. Click "Save to
 Inbox" next to any bookmark and it:
@@ -14,7 +11,6 @@ Inbox" next to any bookmark and it:
 
 No background sync, no two-way logic — just a one-way "move" action,
 triggered manually per bookmark.
-
 
 ## Setup
 
@@ -50,8 +46,9 @@ triggered manually per bookmark.
   creatable over the REST API), you'll see the failure in the on-page
   banner — let me know and I'll switch it back to a plain text note with a
   link, or check your version's ETAPI docs for the accepted type list.
-- The toolbar icon click always opens a fresh tab with the bookmark
-  manager (no popup) since the list can be long.
+- The toolbar icon click always opens the bookmark manager (popup or full
+  tab depending on your sidebar/browser_action setup) since the list can
+  be long.
 - Use the search box at the top to filter by title or URL — useful with
   large bookmark collections.
 - Folders auto-collapse if empty after you've moved every bookmark out of
