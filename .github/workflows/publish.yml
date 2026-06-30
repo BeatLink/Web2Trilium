@@ -23,6 +23,7 @@ jobs:
         run: |
           web-ext sign \
             --channel=listed \
+            --amo-metadata=amo-metadata.json \
             --api-key="${{ secrets.AMO_JWT_ISSUER }}" \
             --api-secret="${{ secrets.AMO_JWT_SECRET }}"
 
