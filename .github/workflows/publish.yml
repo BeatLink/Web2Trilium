@@ -1,0 +1,32 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install web-ext
+        run: npm install -g web-ext
+
+      - name: Build extension
+        run: web-ext build --overwrite-dest
+
+      - name: Submit to AMO
+        run: |
+          web-ext sign \
+            --channel=listed \
+            --api-key="${{ secrets.AMO_JWT_ISSUER }}" \
+            --api-secret="${{ secrets.AMO_JWT_SECRET }}"
+
+      - name: Upload zip to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" web-ext-artifacts/*.zip

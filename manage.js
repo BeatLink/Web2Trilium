@@ -162,7 +162,9 @@ async function renderTabs() {
   tabsTreeEl.innerHTML = ""
   const ownUrl = browser.runtime.getURL("manage.html")
   const tabs = await browser.tabs.query({})
-  const visibleTabs = tabs.filter((t) => t.url && t.url !== ownUrl)
+  const visibleTabs = tabs.filter((t) =>
+    (t.url?.startsWith("http://") || t.url?.startsWith("https://")) && t.url !== ownUrl
+  )
 
   if (visibleTabs.length === 0) {
     tabsTreeEl.innerHTML = `<div class="empty-state">No open tabs.</div>`
@@ -226,19 +228,11 @@ async function saveUrlToInboxNote(title, url) {
     parentNoteId: config.inboxNoteId,
     title: title || url,
     type: "webView",
-    content: ""
-  })
-  await client.createAttribute({
-    noteId: note.note.noteId,
-    type: "label",
-    name: "webViewSrc",
-    value: url
-  })
-  await client.createAttribute({
-    noteId: note.note.noteId,
-    type: "label",
-    name: "url",
-    value: url
+    content: "",
+    attributes: [
+      { type: "label", name: "webViewSrc", value: url },
+      { type: "label", name: "url", value: url }
+    ]
   })
   return note.note.noteId
 }
@@ -253,22 +247,28 @@ async function saveBookmarkAndRemove(node, btn, siblingBtn, row) {
 
   try {
     await saveUrlToInboxNote(node.title, node.url)
-    await browser.bookmarks.remove(node.id)
-
-    btn.textContent = "Saved ✓"
-    btn.classList.add("done")
-    row.style.opacity = "0.5"
-    setTimeout(() => {
-      row.remove()
-      pruneEmptyFolders()
-    }, 500)
   } catch (err) {
     btn.disabled = false
     siblingBtn.disabled = false
     btn.textContent = "Retry"
     btn.classList.add("fail")
     showBanner(`Failed to save "${node.title || node.url}": ${err.message}`, "err")
+    return
   }
+
+  try {
+    await browser.bookmarks.remove(node.id)
+  } catch (err) {
+    showBanner(`Saved to Trilium, but couldn't remove the bookmark: ${err.message}`, "warn")
+  }
+
+  btn.textContent = "Saved ✓"
+  btn.classList.add("done")
+  row.style.opacity = "0.5"
+  setTimeout(() => {
+    row.remove()
+    pruneEmptyFolders()
+  }, 500)
 }
 
 async function deleteBookmarkOnly(node, btn, siblingBtn, row) {
@@ -308,19 +308,25 @@ async function saveTabAndClose(tab, btn, siblingBtn, row) {
 
   try {
     await saveUrlToInboxNote(tab.title, tab.url)
-    await browser.tabs.remove(tab.id)
-
-    btn.textContent = "Saved ✓"
-    btn.classList.add("done")
-    row.style.opacity = "0.5"
-    setTimeout(() => row.remove(), 500)
   } catch (err) {
     btn.disabled = false
     siblingBtn.disabled = false
     btn.textContent = "Retry"
     btn.classList.add("fail")
     showBanner(`Failed to save "${tab.title || tab.url}": ${err.message}`, "err")
+    return
   }
+
+  try {
+    await browser.tabs.remove(tab.id)
+  } catch (err) {
+    showBanner(`Saved to Trilium, but couldn't close the tab: ${err.message}`, "warn")
+  }
+
+  btn.textContent = "Saved ✓"
+  btn.classList.add("done")
+  row.style.opacity = "0.5"
+  setTimeout(() => row.remove(), 500)
 }
 
 async function closeTabOnly(tab, btn, siblingBtn, row) {
@@ -343,7 +349,7 @@ async function closeTabOnly(tab, btn, siblingBtn, row) {
 }
 
 function pruneEmptyFolders() {
-  const folders = treeEl.querySelectorAll(".folder")
+  const folders = [...treeEl.querySelectorAll(".folder")].reverse()
   folders.forEach((folder) => {
     const childrenEl = folder.querySelector(".folder-children")
     if (childrenEl && childrenEl.children.length === 0) {
