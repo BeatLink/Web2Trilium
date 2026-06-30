@@ -1,8 +1,14 @@
 {
+  "name": {
+    "en-US": "Web2Trilium"
+  },
   "summary": {
     "en-US": "Save Firefox bookmarks and open tabs to your Trilium inbox with one click."
   },
   "categories": ["bookmarks"],
+  "default_locale": "en-US",
+  "is_experimental": false,
+  "requires_payment": false,
   "version": {
     "license": "GPL-3.0-only"
   }

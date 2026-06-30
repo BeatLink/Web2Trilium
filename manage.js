@@ -26,8 +26,17 @@ async function loadConfig() {
   }
 }
 
-function svgFavicon() {
-  return `<svg class="favicon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#bbb"/></svg>`
+function createSvgFavicon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+  svg.setAttribute("class", "favicon")
+  svg.setAttribute("viewBox", "0 0 16 16")
+  const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle")
+  circle.setAttribute("cx", "8")
+  circle.setAttribute("cy", "8")
+  circle.setAttribute("r", "6")
+  circle.setAttribute("fill", "#bbb")
+  svg.appendChild(circle)
+  return svg
 }
 
 function makeBookmarkRow(node) {
@@ -37,10 +46,14 @@ function makeBookmarkRow(node) {
 
   const text = document.createElement("div")
   text.className = "bm-text"
-  text.innerHTML = `
-    <div class="bm-title">${escapeHtml(node.title || node.url)}</div>
-    <div class="bm-url">${escapeHtml(node.url)}</div>
-  `
+  const titleEl = document.createElement("div")
+  titleEl.className = "bm-title"
+  titleEl.textContent = node.title || node.url
+  const urlEl = document.createElement("div")
+  urlEl.className = "bm-url"
+  urlEl.textContent = node.url
+  text.appendChild(titleEl)
+  text.appendChild(urlEl)
 
   const actions = document.createElement("div")
   actions.className = "bm-actions"
@@ -59,7 +72,7 @@ function makeBookmarkRow(node) {
   actions.appendChild(saveBtn)
   actions.appendChild(deleteBtn)
 
-  row.innerHTML = svgFavicon()
+  row.appendChild(createSvgFavicon())
   row.appendChild(text)
   row.appendChild(actions)
   return row
@@ -72,10 +85,14 @@ function makeTabRow(tab) {
 
   const text = document.createElement("div")
   text.className = "bm-text"
-  text.innerHTML = `
-    <div class="bm-title">${escapeHtml(tab.title || tab.url)}</div>
-    <div class="bm-url">${escapeHtml(tab.url)}</div>
-  `
+  const titleEl = document.createElement("div")
+  titleEl.className = "bm-title"
+  titleEl.textContent = tab.title || tab.url
+  const urlEl = document.createElement("div")
+  urlEl.className = "bm-url"
+  urlEl.textContent = tab.url
+  text.appendChild(titleEl)
+  text.appendChild(urlEl)
 
   const actions = document.createElement("div")
   actions.className = "bm-actions"
@@ -94,7 +111,7 @@ function makeTabRow(tab) {
   actions.appendChild(saveBtn)
   actions.appendChild(closeBtn)
 
-  row.innerHTML = svgFavicon()
+  row.appendChild(createSvgFavicon())
   row.appendChild(text)
   row.appendChild(actions)
   return row
@@ -106,7 +123,13 @@ function makeFolderNode(node) {
 
   const header = document.createElement("div")
   header.className = "folder-header"
-  header.innerHTML = `<span class="twisty">▾</span><span>${escapeHtml(node.title || "(unnamed)")}</span>`
+  const twisty = document.createElement("span")
+  twisty.className = "twisty"
+  twisty.textContent = "▾"
+  const folderTitle = document.createElement("span")
+  folderTitle.textContent = node.title || "(unnamed)"
+  header.appendChild(twisty)
+  header.appendChild(folderTitle)
 
   const childrenEl = document.createElement("div")
   childrenEl.className = "folder-children"
@@ -134,11 +157,6 @@ function renderNode(node) {
   return null
 }
 
-function escapeHtml(str) {
-  const div = document.createElement("div")
-  div.textContent = str || ""
-  return div.innerHTML
-}
 
 async function renderTree() {
   treeEl.innerHTML = ""
