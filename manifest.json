@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Web2Trilium",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Browse your Firefox bookmarks and open tabs, and send any of them to Trilium's Inbox with one click.",
   "icons": {
     "48": "icons/icon-48.png",
@@ -35,9 +35,9 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "trilium-inbox-saver@local",
-      "strict_min_version": "109.0",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": [],
+        "required": ["none"],
         "optional": []
       }
     }
