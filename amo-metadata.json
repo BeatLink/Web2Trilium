@@ -15,7 +15,6 @@
     "en-US": "https://github.com/BeatLink/Web2Trilium/issues"
   },
   "categories": ["bookmarks"],
-  "tags": ["bookmarks", "tabs", "productivity", "notes"],
   "default_locale": "en-US",
   "is_experimental": false,
   "requires_payment": false,
