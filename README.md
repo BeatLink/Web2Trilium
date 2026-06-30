@@ -1,70 +1,74 @@
-# Trilium Inbox Saver (Firefox extension)
+# Web2Trilium (Firefox extension)
 
 A page listing all your Firefox bookmarks/folders and your open tabs.
 For bookmarks, click "Save to Inbox" or "Delete". For open tabs, click
-"Save to Inbox" (saves the tab's current URL to Trilium, then closes the
-tab) or "Close" (just closes the tab, no Trilium involved).
+"Save to Inbox" (saves the tab's URL to Trilium, then closes the tab)
+or "Close" (just closes the tab, no Trilium involved).
 
 No background sync, no two-way logic — just a one-way "move" action,
-triggered manually per bookmark.
+triggered manually per bookmark or tab.
+
+## Installation
+
+Install from [addons.mozilla.org](https://addons.mozilla.org) (search for **Web2Trilium**),
+or load it temporarily for development:
+
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click "Load Temporary Add-on…"
+3. Select `manifest.json` from this folder
 
 ## Setup
 
 1. **Get an ETAPI token in Trilium**: Options → ETAPI → "Create new ETAPI
    token". Copy it.
 2. **Find your Inbox note ID**: in Trilium, right-click your Inbox note →
-   "Copy note ID to clipboard". (Or use the "Auto-detect" button in this
-   extension's settings if your inbox note carries the `#inbox` label —
-   Trilium sets this automatically if you've configured it as your
-   default inbox under Options → Other.)
-3. **Load the extension** in Firefox:
-   - Go to `about:debugging#/runtime/this-firefox`
-   - Click "Load Temporary Add-on…"
-   - Select `manifest.json` from this folder
-4. Click the toolbar icon → it opens the bookmark manager page directly.
-5. Click "Settings" on that page (or via the toolbar icon's right-click →
-   Manage Extension → Preferences), enter:
-   - Trilium server URL (default `http://localhost:37840` for Trilium
-     Desktop)
+   "Copy note ID to clipboard". (Or use the "Auto-detect" button in the
+   extension's Settings if your inbox note carries the `#inbox` label —
+   Trilium sets this automatically if you've configured it as your default
+   inbox under Options → Other.)
+3. Click the toolbar icon to open Web2Trilium.
+4. Click "Settings", enter:
+   - Trilium server URL (default `http://localhost:37840` for Trilium Desktop)
    - ETAPI token
    - Inbox note ID
-6. Click "Test connection", then "Save".
-7. Go back to the bookmark page, browse/search your bookmarks, click
-   "Save to Inbox" on whichever ones you want moved over.
+5. Click "Test connection", then "Save".
+6. Browse or search your bookmarks and tabs, and click "Save to Inbox" on
+   whichever ones you want moved over.
 
 ## Notes
 
-- Saving (bookmark or tab) creates a note as type **Web View**, matching
-  the `webViewToolbarWidget.js` setup — if you've also installed that
+- **Saving** creates a note of type **Web View** with the `webViewSrc` and
+  `url` labels set. If you've installed the `webViewToolbarWidget.js` Trilium
   widget, saved items immediately get the Back/Forward/Save/Open-in-Browser
-  toolbar when opened in Trilium. If ETAPI in your Trilium version
-  rejects `type: "webView"` (some versions restrict which note types are
-  creatable over the REST API), you'll see the failure in the on-page
-  banner — let me know and I'll switch it back to a plain text note with a
-  link, or check your version's ETAPI docs for the accepted type list.
-- This now requests the **`tabs`** permission (in addition to `bookmarks`
-  and `storage`) so it can list and close open tabs. Firefox will show
-  this as an extra permission prompt on reinstall/update — it's only used
-  to read tab title/URL and close tabs, nothing else.
-- The "Open Tabs" list excludes the manager page itself, but if you have
-  it open in two tabs/windows at once, each instance still shows up in
-  the other's list — closing one from there will close that tab.
-- The toolbar icon click always opens the bookmark manager (popup or full
-  tab depending on your sidebar/browser_action setup) since the list can
-  be long.
-- Use the search box at the top to filter by title or URL — useful with
-  large bookmark collections.
-- Folders auto-collapse if empty after you've moved every bookmark out of
-  them, but the empty Firefox folders themselves aren't deleted (only
-  bookmarks are removed, not folder structure) — let me know if you'd
-  rather folders get cleaned up too once empty.
-- This only requires `bookmarks` and `storage` permissions plus localhost
-  access — no `tabs` or browsing-history permissions needed.
+  toolbar when opened in Trilium.
+- **Open Tabs** only shows `http://` and `https://` tabs — browser-internal
+  pages (`about:blank`, `about:newtab`, etc.) are excluded.
+- **The toolbar icon** focuses the existing Web2Trilium tab if one is already
+  open; it only opens a new tab if none exists.
+- **Folder cleanup**: empty folders are removed from the list after you move
+  or delete their last bookmark, including nested empty parent folders. The
+  underlying Firefox folder structure is left untouched.
+- **Permissions**: `bookmarks`, `tabs`, `storage`, and localhost access.
+  The `tabs` permission is used only to read tab title/URL and close tabs.
+
+## Publishing
+
+Releases are published automatically via GitHub Actions when a GitHub release
+is created. The workflow builds the extension with `web-ext`, submits it to
+AMO for listed review, and attaches the zip to the GitHub release.
+
+Required repository secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `AMO_JWT_ISSUER` | AMO API key (from addons.mozilla.org/developers/addon/api/key/) |
+| `AMO_JWT_SECRET` | AMO API secret (same page) |
 
 ## Files
 
-- `manifest.json` — extension manifest (Manifest V2, for Firefox)
-- `background.js` — opens the manager page when you click the toolbar icon
+- `manifest.json` — extension manifest (Manifest V2, Firefox)
+- `background.js` — handles toolbar icon click
 - `trilium-api.js` — minimal ETAPI client
-- `manage.html` / `manage.js` — the bookmark browser + save action
+- `manage.html` / `manage.js` — bookmark and tab browser + save actions
 - `options.html` / `options.js` — settings UI
+- `.github/workflows/publish.yml` — release automation

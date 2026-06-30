@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Trilium Inbox Saver",
+  "name": "Web2Trilium",
   "version": "1.0.0",
-  "description": "Browse your Firefox bookmarks and send any of them to Trilium's Inbox with one click, removing it from Firefox.",
+  "description": "Browse your Firefox bookmarks and open tabs, and send any of them to Trilium's Inbox with one click.",
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png"
@@ -21,12 +21,12 @@
   },
   "browser_action": {
     "default_icon": "icons/icon-48.png",
-    "default_title": "Open Trilium Inbox Saver"
+    "default_title": "Open Web2Trilium"
   },
   "sidebar_action": {
     "default_panel": "manage.html",
     "default_icon": "icons/icon-48.png",
-    "default_title": "Trilium Inbox Saver"
+    "default_title": "Web2Trilium"
   },
   "options_ui": {
     "page": "options.html",
