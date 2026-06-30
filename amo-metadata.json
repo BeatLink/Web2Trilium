@@ -1,4 +1,8 @@
 {
+  "summary": {
+    "en-US": "Save Firefox bookmarks and open tabs to your Trilium inbox with one click."
+  },
+  "categories": ["bookmarks"],
   "version": {
     "license": "GPL-3.0-only"
   }
