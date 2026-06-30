@@ -5,7 +5,17 @@
   "summary": {
     "en-US": "Save Firefox bookmarks and open tabs to your Trilium inbox with one click."
   },
+  "description": {
+    "en-US": "<p>Web2Trilium shows all your Firefox bookmarks (organised by folder) and your open tabs in a sidebar or tab. For each entry you can:</p><ul><li><strong>Save to Inbox</strong> — creates a Web View note in your Trilium inbox with the <code>webViewSrc</code> and <code>url</code> labels set, then removes the bookmark or closes the tab.</li><li><strong>Delete / Close</strong> — removes the bookmark or closes the tab without touching Trilium.</li></ul><p>No background sync, no two-way logic — just a one-way manual action per bookmark or tab.</p><h3>Setup</h3><ol><li>In Trilium go to Options → ETAPI → Create new ETAPI token and copy it.</li><li>Right-click your Inbox note in Trilium → Copy note ID to clipboard (or use the Auto-detect button in Settings if your inbox carries the <code>#inbox</code> label).</li><li>Open Web2Trilium, click Settings, enter your Trilium server URL, ETAPI token, and Inbox note ID, then Save.</li></ol><h3>Notes</h3><ul><li>Only <code>http://</code> and <code>https://</code> tabs are shown — browser-internal pages are excluded.</li><li>Saved notes work immediately with the <code>webViewToolbarWidget.js</code> Trilium widget.</li><li>Empty bookmark folders are removed from the list after their last entry is moved or deleted.</li></ul>"
+  },
+  "homepage": {
+    "en-US": "https://github.com/BeatLink/Web2Trilium"
+  },
+  "support_url": {
+    "en-US": "https://github.com/BeatLink/Web2Trilium/issues"
+  },
   "categories": ["bookmarks"],
+  "tags": ["bookmarks", "tabs", "productivity", "notes"],
   "default_locale": "en-US",
   "is_experimental": false,
   "requires_payment": false,
