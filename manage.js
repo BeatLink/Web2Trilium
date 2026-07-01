@@ -2,6 +2,7 @@
 
 let config = null
 let client = null
+let sectionState = {}
 
 const treeEl = document.getElementById("tree")
 const tabsTreeEl = document.getElementById("tabsTree")
@@ -24,6 +25,33 @@ async function loadConfig() {
   if (config.token && config.baseUrl) {
     client = new TriliumClient(config.baseUrl, config.token)
   }
+}
+
+async function loadSectionState() {
+  const { sectionState: s } = await browser.storage.local.get("sectionState")
+  sectionState = s || {}
+}
+
+function saveSectionState() {
+  browser.storage.local.set({ sectionState })
+}
+
+function setupSection(headingId, treeEl, key) {
+  const heading = document.getElementById(headingId)
+  if (sectionState[key] === true) {
+    heading.classList.add("collapsed")
+    treeEl.style.display = "none"
+  }
+  heading.addEventListener("click", () => {
+    const nowCollapsed = heading.classList.toggle("collapsed")
+    treeEl.style.display = nowCollapsed ? "none" : ""
+    if (nowCollapsed) {
+      sectionState[key] = true
+    } else {
+      delete sectionState[key]
+    }
+    saveSectionState()
+  })
 }
 
 function createSvgFavicon() {
@@ -148,9 +176,21 @@ function makeFolderNode(node) {
   const childrenEl = document.createElement("div")
   childrenEl.className = "folder-children"
 
+  const fKey = `f_${node.id}`
+  if (sectionState[fKey] === true) {
+    header.classList.add("collapsed")
+    childrenEl.classList.add("collapsed")
+  }
+
   header.addEventListener("click", () => {
     header.classList.toggle("collapsed")
     childrenEl.classList.toggle("collapsed")
+    if (header.classList.contains("collapsed")) {
+      sectionState[fKey] = true
+    } else {
+      delete sectionState[fKey]
+    }
+    saveSectionState()
   })
 
   wrap.appendChild(header)
@@ -418,6 +458,9 @@ searchEl.addEventListener("input", applyFilter);
 
 (async function init() {
   await loadConfig()
+  await loadSectionState()
+  setupSection("tabsSection", tabsTreeEl, "tabs")
+  setupSection("bookmarksSection", treeEl, "bookmarks")
   if (!config.token || !config.inboxNoteId) {
     showBanner(
       "Heads up: finish setup in Settings (ETAPI token + Inbox note ID) before saving bookmarks.",

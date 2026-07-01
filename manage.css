@@ -4,9 +4,8 @@
 
 body {
     font-family: system-ui, -apple-system, sans-serif;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 24px;
+    padding: 8px;
+    margin: 0;
     color: #1c1c1c;
     background: #fafafa;
 }
@@ -14,45 +13,49 @@ body {
 header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin-bottom: 6px;
 }
 
 h1 {
-    font-size: 20px;
+    font-size: 14px;
     margin: 0;
+    white-space: nowrap;
 }
 
 .top-actions {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .top-actions button {
     border: 1px solid #ccc;
     background: white;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 13px;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 #search {
     width: 100%;
-    padding: 9px 12px;
-    margin: 14px 0 18px;
+    padding: 5px 8px;
+    margin: 4px 0 6px;
     border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 14px;
+    border-radius: 6px;
+    font-size: 13px;
 }
 
 #banner {
     display: none;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 14px;
-    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 12px;
 }
 
 #banner.err {
@@ -68,18 +71,18 @@ h1 {
 }
 
 .folder {
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .folder-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     cursor: pointer;
-    padding: 6px 4px;
+    padding: 3px 2px;
     font-weight: 600;
-    font-size: 14px;
-    color: #444;
+    font-size: 12px;
+    color: #555;
     user-select: none;
 }
 
@@ -89,6 +92,7 @@ h1 {
 
 .folder-header .twisty {
     width: 12px;
+    flex-shrink: 0;
     display: inline-block;
     transition: transform 0.15s;
 }
@@ -98,9 +102,9 @@ h1 {
 }
 
 .folder-children {
-    margin-left: 18px;
+    margin-left: 12px;
     border-left: 1px solid #e3e3e3;
-    padding-left: 12px;
+    padding-left: 8px;
 }
 
 .folder-children.collapsed {
@@ -110,10 +114,10 @@ h1 {
 .bookmark-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    padding: 7px 4px;
-    border-radius: 6px;
+    gap: 4px;
+    padding: 3px 2px;
+    border-radius: 4px;
+    min-width: 0;
 }
 
 .bookmark-row:hover {
@@ -121,18 +125,19 @@ h1 {
 }
 
 .favicon {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
 }
 
 .bm-link {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 5px;
     flex: 1;
     min-width: 0;
     cursor: pointer;
+    overflow: hidden;
 }
 
 .bm-link:hover .bm-title {
@@ -145,34 +150,36 @@ h1 {
 }
 
 .bm-title {
-    font-size: 13.5px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .bm-url {
-    font-size: 11px;
-    color: #888;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: none;
 }
 
 .bm-actions {
-    display: flex;
-    gap: 6px;
+    display: none;
+    gap: 3px;
     flex-shrink: 0;
+}
+
+.bookmark-row:hover .bm-actions,
+.bookmark-row:focus-within .bm-actions {
+    display: flex;
 }
 
 .save-btn,
 .delete-btn {
     flex-shrink: 0;
     border: none;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .save-btn {
@@ -215,44 +222,80 @@ h1 {
 .empty-state {
     text-align: center;
     color: #888;
-    padding: 60px 20px;
-    font-size: 14px;
+    padding: 30px 10px;
+    font-size: 13px;
 }
 
 .section-title {
-    font-size: 13px;
+    font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #888;
-    margin: 22px 0 8px;
+    margin: 12px 0 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-title::before {
+    content: "▾\00a0";
+}
+
+.section-title.collapsed::before {
+    content: "▸\00a0";
 }
 
 .section-title:first-of-type {
     margin-top: 0;
 }
 
-/* Sidebar / narrow-width layout */
-@media (max-width: 420px) {
+/* Wide / tab layout */
+@media (min-width: 500px) {
     body {
-        padding: 14px;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 20px 24px;
     }
 
-    h1 {
-        font-size: 16px;
-    }
+    h1 { font-size: 20px; }
 
     .top-actions button {
-        padding: 5px 8px;
+        padding: 6px 10px;
+        font-size: 13px;
+        border-radius: 6px;
+    }
+
+    #search {
+        padding: 9px 12px;
+        margin: 14px 0 18px;
+        font-size: 14px;
+        border-radius: 8px;
+    }
+
+    .folder-header { font-size: 14px; padding: 6px 4px; gap: 6px; }
+    .folder-children { margin-left: 18px; padding-left: 12px; }
+
+    .bookmark-row { gap: 10px; padding: 7px 4px; border-radius: 6px; }
+    .favicon { width: 16px; height: 16px; }
+
+    .bm-link { gap: 10px; }
+
+    .bm-url {
+        display: block;
+        font-size: 11px;
+        color: #888;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .bm-actions { display: flex; gap: 6px; }
+
+    .save-btn,
+    .delete-btn {
+        padding: 6px 10px;
         font-size: 12px;
+        border-radius: 6px;
     }
 
-    .bookmark-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 4px;
-    }
-
-    .bm-actions {
-        justify-content: flex-end;
-    }
+    .section-title { font-size: 13px; margin: 22px 0 8px; }
 }
