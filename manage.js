@@ -261,12 +261,11 @@ async function saveUrlToInboxNote(title, url) {
     title: title || url,
     type: "webView",
     content: "",
-    attributes: [
-      { type: "label", name: "webViewSrc", value: url },
-      { type: "label", name: "url", value: url }
-    ]
   })
-  return note.note.noteId
+  const noteId = note.note.noteId
+  await client.createAttribute({ noteId, type: "label", name: "webViewSrc", value: url })
+  await client.createAttribute({ noteId, type: "label", name: "url", value: url })
+  return noteId
 }
 
 async function saveBookmarkAndRemove(node, btn, siblingBtn, row) {

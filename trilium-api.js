@@ -29,14 +29,13 @@ class TriliumClient {
     return this.request("GET", "/etapi/app-info")
   }
 
-  async createNote({ parentNoteId, title, type = "text", content = "", mime, attributes }) {
+  async createNote({ parentNoteId, title, type = "text", content = "", mime }) {
     return this.request("POST", "/etapi/create-note", {
       parentNoteId,
       title,
       type,
       content,
       mime,
-      ...(attributes ? { attributes } : {})
     })
   }
 
