@@ -44,6 +44,11 @@ function makeBookmarkRow(node) {
   row.className = "bookmark-row"
   row.dataset.id = node.id
 
+  const link = document.createElement("div")
+  link.className = "bm-link"
+  link.title = node.url
+  link.addEventListener("click", () => browser.tabs.create({ url: node.url }))
+
   const text = document.createElement("div")
   text.className = "bm-text"
   const titleEl = document.createElement("div")
@@ -54,6 +59,9 @@ function makeBookmarkRow(node) {
   urlEl.textContent = node.url
   text.appendChild(titleEl)
   text.appendChild(urlEl)
+
+  link.appendChild(createSvgFavicon())
+  link.appendChild(text)
 
   const actions = document.createElement("div")
   actions.className = "bm-actions"
@@ -72,8 +80,7 @@ function makeBookmarkRow(node) {
   actions.appendChild(saveBtn)
   actions.appendChild(deleteBtn)
 
-  row.appendChild(createSvgFavicon())
-  row.appendChild(text)
+  row.appendChild(link)
   row.appendChild(actions)
   return row
 }
@@ -82,6 +89,11 @@ function makeTabRow(tab) {
   const row = document.createElement("div")
   row.className = "bookmark-row"
   row.dataset.id = tab.id
+
+  const link = document.createElement("div")
+  link.className = "bm-link"
+  link.title = tab.url
+  link.addEventListener("click", () => browser.tabs.update(tab.id, { active: true }))
 
   const text = document.createElement("div")
   text.className = "bm-text"
@@ -93,6 +105,9 @@ function makeTabRow(tab) {
   urlEl.textContent = tab.url
   text.appendChild(titleEl)
   text.appendChild(urlEl)
+
+  link.appendChild(createSvgFavicon())
+  link.appendChild(text)
 
   const actions = document.createElement("div")
   actions.className = "bm-actions"
@@ -111,8 +126,7 @@ function makeTabRow(tab) {
   actions.appendChild(saveBtn)
   actions.appendChild(closeBtn)
 
-  row.appendChild(createSvgFavicon())
-  row.appendChild(text)
+  row.appendChild(link)
   row.appendChild(actions)
   return row
 }

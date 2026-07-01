@@ -126,6 +126,19 @@ h1 {
     flex-shrink: 0;
 }
 
+.bm-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.bm-link:hover .bm-title {
+    text-decoration: underline;
+}
+
 .bm-text {
     flex: 1;
     min-width: 0;
@@ -241,9 +254,5 @@ h1 {
 
     .bm-actions {
         justify-content: flex-end;
-    }
-
-    .bm-text {
-        order: -1;
     }
 }
