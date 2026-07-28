@@ -3,11 +3,13 @@
 let config = null
 let client = null
 let sectionState = {}
+let profileList = []
 
 const treeEl = document.getElementById("tree")
 const tabsTreeEl = document.getElementById("tabsTree")
 const searchEl = document.getElementById("search")
 const bannerEl = document.getElementById("banner")
+const profileSelectEl = document.getElementById("profileSelect")
 
 function showBanner(message, level) {
   bannerEl.textContent = message
@@ -20,11 +22,41 @@ function clearBanner() {
 }
 
 async function loadConfig() {
-  const { config: c } = await browser.storage.local.get("config")
-  config = c || {}
-  if (config.token && config.baseUrl) {
-    client = new TriliumClient(config.baseUrl, config.token)
+  const state = await loadProfiles()
+  profileList = state.profiles
+  config = state.profiles.find((p) => p.id === state.activeProfileId) || {}
+  client = config.token && config.baseUrl
+    ? new TriliumClient(config.baseUrl, config.token)
+    : null
+  renderProfileSelect(state.activeProfileId)
+}
+
+function renderProfileSelect(activeProfileId) {
+  profileSelectEl.innerHTML = ""
+  profileList.forEach((p) => {
+    const opt = document.createElement("option")
+    opt.value = p.id
+    opt.textContent = p.name
+    profileSelectEl.appendChild(opt)
+  })
+  profileSelectEl.value = activeProfileId
+  // A lone profile is just noise in the header.
+  profileSelectEl.style.display = profileList.length > 1 ? "" : "none"
+}
+
+// Warns when the active profile isn't fully configured. Returns true if setup
+// is incomplete.
+function checkSetup() {
+  if (!config.token || !config.inboxNoteId) {
+    showBanner(
+      `Heads up: finish setup for profile "${config.name || "?"}" in Settings ` +
+      `(ETAPI token + Inbox note ID) before saving bookmarks.`,
+      "warn"
+    )
+    return true
   }
+  clearBanner()
+  return false
 }
 
 async function loadSectionState() {
@@ -431,8 +463,34 @@ function pruneEmptyFolders() {
 
 document.getElementById("refresh").addEventListener("click", async () => {
   await loadConfig()
+  checkSetup()
   await renderTree()
   await renderTabs()
+})
+
+// Keep the panel in sync when profiles are edited in the Settings tab, or when
+// another open panel switches profile.
+// Set while this panel is writing its own profile change, so the storage
+// listener below doesn't clobber the confirmation banner we just showed.
+let selfWrite = false
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || selfWrite) return
+  if (!changes.profiles && !changes.activeProfileId) return
+  loadConfig().then(checkSetup)
+})
+
+profileSelectEl.addEventListener("change", async () => {
+  selfWrite = true
+  try {
+    await setActiveProfile(profileSelectEl.value)
+    await loadConfig()
+    if (!checkSetup()) {
+      showBanner(`Saving to profile "${config.name}".`, "ok")
+    }
+  } finally {
+    selfWrite = false
+  }
 })
 
 document.getElementById("openOptions").addEventListener("click", () => {
@@ -461,12 +519,7 @@ searchEl.addEventListener("input", applyFilter);
   await loadSectionState()
   setupSection("tabsSection", tabsTreeEl, "tabs")
   setupSection("bookmarksSection", treeEl, "bookmarks")
-  if (!config.token || !config.inboxNoteId) {
-    showBanner(
-      "Heads up: finish setup in Settings (ETAPI token + Inbox note ID) before saving bookmarks.",
-      "warn"
-    )
-  }
+  checkSetup()
   await renderTree()
   await renderTabs()
 })()

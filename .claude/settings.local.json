@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://addons.mozilla.org/api/v5/addons/tags/\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(nix run *)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:triliumnext.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
