@@ -99,10 +99,208 @@ function createSvgFavicon() {
   return svg
 }
 
+// ---------------------------------------------------------------------------
+// Drag & drop reordering
+//
+// Bookmark rows and folder headers are drag sources. Dropping onto the top or
+// bottom half of a row places the dragged node before or after it; dropping
+// onto a folder header files it inside that folder. Moves go straight to
+// browser.bookmarks.move(), then the tree is re-rendered so indices stay
+// truthful.
+// ---------------------------------------------------------------------------
+
+// The node currently being dragged. Set on dragstart because dataTransfer
+// contents aren't readable during dragover, which is where we need to know
+// whether a drop is legal.
+let dragNode = null
+
+function makeDraggable(el, node) {
+  el.draggable = true
+
+  el.addEventListener("dragstart", (e) => {
+    e.stopPropagation()
+    dragNode = node
+    el.classList.add("dragging")
+    e.dataTransfer.effectAllowed = "move"
+    // Also publish the URL so the bookmark can be dragged out to other apps.
+    if (node.url) {
+      e.dataTransfer.setData("text/uri-list", node.url)
+      e.dataTransfer.setData("text/plain", node.url)
+    } else {
+      e.dataTransfer.setData("text/plain", node.title || "")
+    }
+  })
+
+  el.addEventListener("dragend", () => {
+    dragNode = null
+    el.classList.remove("dragging")
+    clearDropMarkers()
+  })
+}
+
+function clearDropMarkers() {
+  document
+    .querySelectorAll(".drop-before, .drop-after, .drop-into")
+    .forEach((el) => el.classList.remove("drop-before", "drop-after", "drop-into"))
+}
+
+// True when `node` is `ancestorId` itself or sits somewhere beneath it.
+// Dropping a folder into its own subtree would detach it from the tree, and
+// browser.bookmarks.move() rejects it, so we refuse the drop up front.
+async function isSelfOrDescendant(ancestorId, nodeId) {
+  if (ancestorId === nodeId) return true
+  let current = nodeId
+  // Walk up from the drop target; cheaper than walking the whole subtree down.
+  while (current) {
+    const [n] = await browser.bookmarks.get(current)
+    if (!n || !n.parentId) return false
+    if (n.parentId === ancestorId) return true
+    current = n.parentId
+  }
+  return false
+}
+
+// Rejects drags that have no source (e.g. a link dragged in from a web page)
+// and folder-into-itself moves. Synchronous so it can gate dragover.
+function canDrop(targetNode) {
+  if (!dragNode) return false
+  if (dragNode.id === targetNode.id) return false
+  return true
+}
+
+// Drop onto a bookmark row: place the dragged node before or after it,
+// depending on which half of the row the cursor is over.
+function makeReorderTarget(row, node) {
+  row.addEventListener("dragover", (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = "move"
+    const rect = row.getBoundingClientRect()
+    const after = e.clientY > rect.top + rect.height / 2
+    clearDropMarkers()
+    row.classList.add(after ? "drop-after" : "drop-before")
+  })
+
+  row.addEventListener("dragleave", (e) => {
+    if (e.target === row) row.classList.remove("drop-before", "drop-after")
+  })
+
+  row.addEventListener("drop", async (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = row.getBoundingClientRect()
+    const after = e.clientY > rect.top + rect.height / 2
+    clearDropMarkers()
+    await moveRelativeTo(dragNode, node, after)
+  })
+}
+
+// Drop onto a folder header: file the dragged node inside that folder, at the
+// end of its existing children.
+function makeFolderDropTarget(header, childrenEl, node) {
+  header.addEventListener("dragover", (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = "move"
+    clearDropMarkers()
+    header.classList.add("drop-into")
+  })
+
+  header.addEventListener("dragleave", (e) => {
+    if (e.target === header) header.classList.remove("drop-into")
+  })
+
+  header.addEventListener("drop", async (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.stopPropagation()
+    clearDropMarkers()
+
+    // dragend fires before these awaits settle and clears dragNode, so hold a
+    // local reference.
+    const moving = dragNode
+    if (await isSelfOrDescendant(moving.id, node.id)) {
+      showBanner("Can't move a folder inside itself.", "err")
+      return
+    }
+    await applyMove(moving.id, { parentId: node.id })
+
+    // A folder you just dropped into should show what landed in it.
+    header.classList.remove("collapsed")
+    childrenEl.classList.remove("collapsed")
+    delete sectionState[`f_${node.id}`]
+    saveSectionState()
+  })
+}
+
+// Drop onto a folder's body (the gap below its rows): append to that folder.
+// Row and header handlers stopPropagation, so this only fires for drops that
+// missed both.
+function makeContainerDropTarget(childrenEl, node) {
+  childrenEl.addEventListener("dragover", (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+  })
+
+  childrenEl.addEventListener("drop", async (e) => {
+    if (!canDrop(node)) return
+    e.preventDefault()
+    e.stopPropagation()
+    clearDropMarkers()
+    const moving = dragNode
+    if (await isSelfOrDescendant(moving.id, node.id)) {
+      showBanner("Can't move a folder inside itself.", "err")
+      return
+    }
+    await applyMove(moving.id, { parentId: node.id })
+  })
+}
+
+// Moves `node` to sit immediately before or after `target` among its siblings.
+async function moveRelativeTo(node, target, after) {
+  const [fresh] = await browser.bookmarks.get(target.id)
+  if (!fresh) return
+
+  if (await isSelfOrDescendant(node.id, fresh.parentId)) {
+    showBanner("Can't move a folder inside itself.", "err")
+    return
+  }
+
+  const [dragged] = await browser.bookmarks.get(node.id)
+  let index = fresh.index + (after ? 1 : 0)
+
+  // Within one folder, removing the dragged node shifts every later sibling
+  // down by one, so a downward move needs its target index decremented.
+  if (dragged && dragged.parentId === fresh.parentId && dragged.index < fresh.index) {
+    index -= 1
+  }
+
+  await applyMove(node.id, { parentId: fresh.parentId, index })
+}
+
+async function applyMove(id, destination) {
+  clearBanner()
+  try {
+    await browser.bookmarks.move(id, destination)
+  } catch (err) {
+    showBanner(`Couldn't move bookmark: ${err.message}`, "err")
+    return
+  }
+  // Indices are now stale everywhere; a re-render is simpler than patching.
+  await renderTree()
+  applyFilter()
+}
+
 function makeBookmarkRow(node) {
   const row = document.createElement("div")
   row.className = "bookmark-row"
   row.dataset.id = node.id
+  makeDraggable(row, node)
+  makeReorderTarget(row, node)
 
   const link = document.createElement("div")
   link.className = "bm-link"
@@ -207,6 +405,11 @@ function makeFolderNode(node) {
 
   const childrenEl = document.createElement("div")
   childrenEl.className = "folder-children"
+  childrenEl.dataset.parentId = node.id
+
+  makeDraggable(header, node)
+  makeFolderDropTarget(header, childrenEl, node)
+  makeContainerDropTarget(childrenEl, node)
 
   const fKey = `f_${node.id}`
   if (sectionState[fKey] === true) {
@@ -233,7 +436,11 @@ function makeFolderNode(node) {
     if (childEl) childrenEl.appendChild(childEl)
   })
 
-  return childrenEl.children.length > 0 ? wrap : null
+  // Empty folders are still rendered — otherwise they'd be invisible and you
+  // could never drag anything into them. applyFilter() hides them during a
+  // search, and they're marked so the layout can slim them down.
+  if (childrenEl.children.length === 0) wrap.classList.add("folder-empty")
+  return wrap
 }
 
 function renderNode(node) {
@@ -292,6 +499,9 @@ function applyFilter() {
     tabRows.forEach((r) => (r.style.display = ""))
     return
   }
+
+  // An empty folder can't match a query, so keep it out of search results even
+  // though it's shown when browsing.
 
   const matches = (r) => {
     const title = r.querySelector(".bm-title").textContent.toLowerCase()
@@ -451,12 +661,13 @@ async function closeTabOnly(tab, btn, siblingBtn, row) {
   }
 }
 
+// Folders emptied by saving/deleting their last bookmark stay in the tree as
+// drop targets, but get marked so they render compactly.
 function pruneEmptyFolders() {
-  const folders = [...treeEl.querySelectorAll(".folder")].reverse()
-  folders.forEach((folder) => {
+  treeEl.querySelectorAll(".folder").forEach((folder) => {
     const childrenEl = folder.querySelector(".folder-children")
-    if (childrenEl && childrenEl.children.length === 0) {
-      folder.remove()
+    if (childrenEl) {
+      folder.classList.toggle("folder-empty", childrenEl.children.length === 0)
     }
   })
 }
