@@ -177,6 +177,7 @@ function syncSelectionUI() {
     sectionRoot(kind).querySelectorAll(".bookmark-row").forEach((row) => {
       const on = selectionKind === kind && selectedIds.has(row.dataset.id)
       row.classList.toggle("selected", on)
+      row.setAttribute("aria-selected", on ? "true" : "false")
       const cb = row.querySelector(".row-check")
       if (cb) cb.checked = on
     })
@@ -214,10 +215,15 @@ function reconcileSelection() {
 
 // The checkbox that fronts every row. Clicks here never bubble to the row's
 // open-this-link handler.
+//
+// The checkbox is deliberately not a tab stop: rows themselves are focusable
+// (see the keyboard section below), so leaving it in the tab order would mean
+// two stops per row and Tab would take dozens of presses to cross a tree.
 function makeRowCheckbox(kind, id) {
   const cb = document.createElement("input")
   cb.type = "checkbox"
   cb.className = "row-check"
+  cb.tabIndex = -1
   cb.title = "Select (shift-click to select a range)"
   cb.addEventListener("click", (e) => {
     e.stopPropagation()
@@ -227,8 +233,161 @@ function makeRowCheckbox(kind, id) {
       toggleSelected(kind, id, cb.checked)
     }
     anchorId[kind] = String(id)
+    focusedId[kind] = String(id)
   })
   return cb
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard selection
+//
+// Each section is a roving-tabindex listbox: one row holds tabindex="0" and
+// the arrow keys move it, so Tab reaches the list in a single press and then
+// the arrows walk it. Mirrors the shortcuts of a file manager —
+//
+//   ↑ / ↓         move focus
+//   Shift+↑/↓     extend the selection while moving
+//   Space         toggle the focused row
+//   Shift+Click   or Shift+Space — select through to the anchor
+//   Ctrl+A        select every visible row in the section
+//   Enter         open the focused bookmark / switch to the focused tab
+//   Escape        clear the selection
+//
+// Focus is tracked by id rather than by element so it survives the re-render
+// that follows every mutation.
+// ---------------------------------------------------------------------------
+
+const focusedId = { bookmarks: null, tabs: null }
+
+function rowElement(kind, id) {
+  return sectionRoot(kind).querySelector(
+    `.bookmark-row[data-id="${CSS.escape(String(id))}"]`
+  )
+}
+
+// Applies the roving tabindex: the focused row is the section's only tab stop,
+// falling back to the first row so a section is always reachable.
+function syncRovingTabindex(kind) {
+  const rows = visibleRows(kind)
+  if (rows.length === 0) return
+  let target = rows.find((r) => r.dataset.id === focusedId[kind]) || rows[0]
+  rows.forEach((r) => {
+    r.tabIndex = r === target ? 0 : -1
+  })
+}
+
+function focusRow(kind, id, { scroll = true } = {}) {
+  focusedId[kind] = String(id)
+  syncRovingTabindex(kind)
+  const el = rowElement(kind, id)
+  if (!el) return
+  el.focus({ preventScroll: true })
+  if (scroll) el.scrollIntoView({ block: "nearest" })
+}
+
+// Moves focus within the section and returns the row landed on, or null when
+// the section is empty. `to` is a row delta, or the string "first"/"last".
+function moveFocus(kind, to, { extend = false } = {}) {
+  const rows = visibleRows(kind)
+  if (rows.length === 0) return null
+
+  const current = rows.findIndex((r) => r.dataset.id === focusedId[kind])
+  let next
+  if (to === "first") next = 0
+  else if (to === "last") next = rows.length - 1
+  // With no focus yet, ↓ starts at the top and ↑ at the bottom.
+  else if (current === -1) next = to > 0 ? 0 : rows.length - 1
+  else next = Math.min(rows.length - 1, Math.max(0, current + to))
+
+  const id = rows[next].dataset.id
+  if (extend) {
+    // Shift+arrow grows a run from wherever the anchor was dropped, matching
+    // the behaviour of shift-clicking that same row.
+    if (anchorId[kind] === null) anchorId[kind] = focusedId[kind] || id
+    selectRange(kind, id)
+  }
+  focusRow(kind, id)
+  return rows[next]
+}
+
+function selectAllVisible(kind) {
+  const rows = visibleRows(kind)
+  if (rows.length === 0) return
+  selectedIds.clear()
+  selectionKind = kind
+  rows.forEach((r) => selectedIds.add(r.dataset.id))
+  syncSelectionUI()
+}
+
+// Opens whatever the focused row points at: a bookmark in a new tab, or the
+// tab itself.
+function activateRow(kind, id) {
+  const row = rowElement(kind, id)
+  if (!row) return
+  // Reuses the row's own click handler so there's one definition of "open".
+  const link = row.querySelector(".bm-link")
+  if (link) link.click()
+}
+
+// One handler per section. Bound to the tree container so it keeps working
+// across re-renders, which replace every row element.
+function installKeyboardNav(kind) {
+  sectionRoot(kind).addEventListener("keydown", (e) => {
+    const row = e.target.closest?.(".bookmark-row")
+    if (!row) return
+    const id = row.dataset.id
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault()
+        moveFocus(kind, 1, { extend: e.shiftKey })
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        moveFocus(kind, -1, { extend: e.shiftKey })
+        break
+      case "Home":
+        e.preventDefault()
+        moveFocus(kind, "first", { extend: e.shiftKey })
+        break
+      case "End":
+        e.preventDefault()
+        moveFocus(kind, "last", { extend: e.shiftKey })
+        break
+      case " ":
+      case "Spacebar":
+        e.preventDefault()
+        if (e.shiftKey && anchorId[kind] !== null) {
+          selectRange(kind, id)
+        } else {
+          toggleSelected(kind, id, !selectedIds.has(id))
+          anchorId[kind] = id
+        }
+        break
+      case "Enter":
+        e.preventDefault()
+        activateRow(kind, id)
+        break
+      case "a":
+      case "A":
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault()
+          selectAllVisible(kind)
+        }
+        break
+      default:
+        return
+    }
+  })
+
+  // Clicking or tabbing into a row makes it the section's tab stop, so focus
+  // resumes from there rather than jumping back to the top.
+  sectionRoot(kind).addEventListener("focusin", (e) => {
+    const row = e.target.closest?.(".bookmark-row")
+    if (!row) return
+    focusedId[kind] = row.dataset.id
+    syncRovingTabindex(kind)
+  })
 }
 
 // The ids to act on when a batch button is pressed, in the order they appear
@@ -490,6 +649,10 @@ function makeBookmarkRow(node) {
   const row = document.createElement("div")
   row.className = "bookmark-row"
   row.dataset.id = node.id
+  // Focusable so the arrow keys can rove between rows; syncRovingTabindex()
+  // promotes exactly one row per section to a real tab stop.
+  row.tabIndex = -1
+  row.setAttribute("role", "option")
   makeDraggable(row, node)
   makeReorderTarget(row, node)
   row.appendChild(makeRowCheckbox("bookmarks", node.id))
@@ -539,6 +702,8 @@ function makeTabRow(tab) {
   const row = document.createElement("div")
   row.className = "bookmark-row"
   row.dataset.id = tab.id
+  row.tabIndex = -1
+  row.setAttribute("role", "option")
   row.appendChild(makeRowCheckbox("tabs", tab.id))
 
   const link = document.createElement("div")
@@ -1214,6 +1379,9 @@ async function refreshAll() {
   await renderTabs()
   applyFilter()
   reconcileSelection()
+  // Rows were all replaced; re-establish the single tab stop per section.
+  syncRovingTabindex("bookmarks")
+  syncRovingTabindex("tabs")
 
   // Restore after layout settles; a tree that got shorter clamps the offset to
   // the new maximum on its own.
@@ -1325,13 +1493,20 @@ toggleBtn.addEventListener("click", async () => {
   }
 })
 
-searchEl.addEventListener("input", applyFilter);
+// Filtering hides rows, which can strand the tab stop on something invisible.
+searchEl.addEventListener("input", () => {
+  applyFilter()
+  syncRovingTabindex("bookmarks")
+  syncRovingTabindex("tabs")
+});
 
 (async function init() {
   await loadConfig()
   await loadSectionState()
   setupSection("tabsSection", tabsTreeEl, "tabs")
   setupSection("bookmarksSection", treeEl, "bookmarks")
+  installKeyboardNav("bookmarks")
+  installKeyboardNav("tabs")
   checkSetup()
   await refreshAll()
 })()
