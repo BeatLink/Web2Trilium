@@ -139,13 +139,16 @@ function clearSelection() {
   syncSelectionUI()
 }
 
+// Tab ids are numbers and bookmark ids are strings, but every lookup goes
+// through row.dataset.id, which the DOM always hands back as a string. Ids are
+// normalized here so a Set built from tab ids can still be queried by dataset.
 function toggleSelected(kind, id, on) {
   if (selectionKind !== kind) {
     selectedIds.clear()
     selectionKind = kind
   }
-  if (on) selectedIds.add(id)
-  else selectedIds.delete(id)
+  if (on) selectedIds.add(String(id))
+  else selectedIds.delete(String(id))
   if (selectedIds.size === 0) selectionKind = null
   syncSelectionUI()
 }
@@ -223,7 +226,7 @@ function makeRowCheckbox(kind, id) {
     } else {
       toggleSelected(kind, id, cb.checked)
     }
-    anchorId[kind] = id
+    anchorId[kind] = String(id)
   })
   return cb
 }
