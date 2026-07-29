@@ -10,6 +10,11 @@ const tabsTreeEl = document.getElementById("tabsTree")
 const searchEl = document.getElementById("search")
 const bannerEl = document.getElementById("banner")
 const profileSelectEl = document.getElementById("profileSelect")
+const selectionBarEl = document.getElementById("selectionBar")
+const selectionCountEl = document.getElementById("selectionCount")
+const selSaveBtn = document.getElementById("selSave")
+const selDeleteBtn = document.getElementById("selDelete")
+const selClearBtn = document.getElementById("selClear")
 
 function showBanner(message, level) {
   bannerEl.textContent = message
@@ -100,6 +105,139 @@ function createSvgFavicon() {
 }
 
 // ---------------------------------------------------------------------------
+// Multi-select
+//
+// Bookmarks and tabs are selected independently — a batch operation only makes
+// sense within one kind, and "Delete" means different things to each. Selecting
+// in one section therefore clears the other. Selection is keyed by node/tab id
+// and rebuilt against the DOM after every re-render, so ids that vanished
+// (moved-away bookmarks, closed tabs) drop out on their own.
+// ---------------------------------------------------------------------------
+
+// "bookmarks" | "tabs" — which section the current selection belongs to.
+let selectionKind = null
+const selectedIds = new Set()
+
+// Last row clicked in each section, for shift-click ranges.
+const anchorId = { bookmarks: null, tabs: null }
+
+function sectionRoot(kind) {
+  return kind === "tabs" ? tabsTreeEl : treeEl
+}
+
+// Rows in visual order, skipping anything the filter has hidden — shift-click
+// should span what you can see, not what's behind a search.
+function visibleRows(kind) {
+  return Array.from(sectionRoot(kind).querySelectorAll(".bookmark-row")).filter(
+    (r) => r.offsetParent !== null
+  )
+}
+
+function clearSelection() {
+  selectedIds.clear()
+  selectionKind = null
+  syncSelectionUI()
+}
+
+function toggleSelected(kind, id, on) {
+  if (selectionKind !== kind) {
+    selectedIds.clear()
+    selectionKind = kind
+  }
+  if (on) selectedIds.add(id)
+  else selectedIds.delete(id)
+  if (selectedIds.size === 0) selectionKind = null
+  syncSelectionUI()
+}
+
+// Shift-click: select every row between the anchor and the clicked row,
+// inclusive, without disturbing selections outside that span.
+function selectRange(kind, id) {
+  const rows = visibleRows(kind)
+  const from = rows.findIndex((r) => r.dataset.id === String(anchorId[kind]))
+  const to = rows.findIndex((r) => r.dataset.id === String(id))
+  if (from === -1 || to === -1) return toggleSelected(kind, id, true)
+
+  if (selectionKind !== kind) {
+    selectedIds.clear()
+    selectionKind = kind
+  }
+  const [lo, hi] = from < to ? [from, to] : [to, from]
+  for (let i = lo; i <= hi; i++) selectedIds.add(rows[i].dataset.id)
+  syncSelectionUI()
+}
+
+// Single source of truth for checkbox state, row highlighting and the toolbar.
+// Called after selection changes and after every re-render.
+function syncSelectionUI() {
+  for (const kind of ["bookmarks", "tabs"]) {
+    sectionRoot(kind).querySelectorAll(".bookmark-row").forEach((row) => {
+      const on = selectionKind === kind && selectedIds.has(row.dataset.id)
+      row.classList.toggle("selected", on)
+      const cb = row.querySelector(".row-check")
+      if (cb) cb.checked = on
+    })
+  }
+
+  const n = selectedIds.size
+  if (n === 0) {
+    selectionBarEl.classList.remove("visible")
+    return
+  }
+  selectionBarEl.classList.add("visible")
+  const noun = selectionKind === "tabs" ? "tab" : "bookmark"
+  selectionCountEl.textContent = `${n} ${noun}${n === 1 ? "" : "s"} selected`
+  selSaveBtn.textContent = `Save ${n} to Inbox`
+  selDeleteBtn.textContent = selectionKind === "tabs" ? `Close ${n}` : `Delete ${n}`
+  selSaveBtn.disabled = false
+  selDeleteBtn.disabled = false
+}
+
+// Drops ids whose rows are gone (deleted, saved, or filtered out of existence
+// by a re-render) so counts never overstate what a batch action would touch.
+function reconcileSelection() {
+  if (!selectionKind) return syncSelectionUI()
+  const present = new Set(
+    Array.from(sectionRoot(selectionKind).querySelectorAll(".bookmark-row")).map(
+      (r) => r.dataset.id
+    )
+  )
+  for (const id of Array.from(selectedIds)) {
+    if (!present.has(id)) selectedIds.delete(id)
+  }
+  if (selectedIds.size === 0) selectionKind = null
+  syncSelectionUI()
+}
+
+// The checkbox that fronts every row. Clicks here never bubble to the row's
+// open-this-link handler.
+function makeRowCheckbox(kind, id) {
+  const cb = document.createElement("input")
+  cb.type = "checkbox"
+  cb.className = "row-check"
+  cb.title = "Select (shift-click to select a range)"
+  cb.addEventListener("click", (e) => {
+    e.stopPropagation()
+    if (e.shiftKey && anchorId[kind] !== null) {
+      selectRange(kind, id)
+    } else {
+      toggleSelected(kind, id, cb.checked)
+    }
+    anchorId[kind] = id
+  })
+  return cb
+}
+
+// The ids to act on when a batch button is pressed, in the order they appear
+// on screen.
+function selectedNodeIds() {
+  if (!selectionKind) return []
+  return Array.from(sectionRoot(selectionKind).querySelectorAll(".bookmark-row"))
+    .map((r) => r.dataset.id)
+    .filter((id) => selectedIds.has(id))
+}
+
+// ---------------------------------------------------------------------------
 // Drag & drop reordering
 //
 // Bookmark rows and folder headers are drag sources. Dropping onto the top or
@@ -114,13 +252,31 @@ function createSvgFavicon() {
 // whether a drop is legal.
 let dragNode = null
 
+// Ids being dragged, in tree order. Usually just [dragNode.id]; when the drag
+// starts on a selected bookmark row, the whole selection travels together.
+let dragIds = []
+
+// Bookmark ids of everything currently selected, in on-screen order — the set
+// a drag starting on a selected row should carry.
+function selectedBookmarkIds() {
+  return selectionKind === "bookmarks" ? selectedNodeIds() : []
+}
+
 function makeDraggable(el, node) {
   el.draggable = true
 
   el.addEventListener("dragstart", (e) => {
     e.stopPropagation()
     dragNode = node
+
+    const selected = selectedBookmarkIds()
+    dragIds = selected.includes(node.id) ? selected : [node.id]
+    dragIds.forEach((id) => {
+      const row = treeEl.querySelector(`.bookmark-row[data-id="${CSS.escape(id)}"]`)
+      if (row) row.classList.add("dragging")
+    })
     el.classList.add("dragging")
+
     e.dataTransfer.effectAllowed = "move"
     // Also publish the URL so the bookmark can be dragged out to other apps.
     if (node.url) {
@@ -133,7 +289,8 @@ function makeDraggable(el, node) {
 
   el.addEventListener("dragend", () => {
     dragNode = null
-    el.classList.remove("dragging")
+    dragIds = []
+    document.querySelectorAll(".dragging").forEach((r) => r.classList.remove("dragging"))
     clearDropMarkers()
   })
 }
@@ -164,7 +321,8 @@ async function isSelfOrDescendant(ancestorId, nodeId) {
 // and folder-into-itself moves. Synchronous so it can gate dragover.
 function canDrop(targetNode) {
   if (!dragNode) return false
-  if (dragNode.id === targetNode.id) return false
+  // A row that's part of the dragged set can't also be the thing it lands on.
+  if (dragIds.includes(targetNode.id)) return false
   return true
 }
 
@@ -193,7 +351,8 @@ function makeReorderTarget(row, node) {
     const rect = row.getBoundingClientRect()
     const after = e.clientY > rect.top + rect.height / 2
     clearDropMarkers()
-    await moveRelativeTo(dragNode, node, after)
+    // dragend clears dragIds before these awaits settle, so snapshot it.
+    await moveRelativeTo(dragIds.slice(), node, after)
   })
 }
 
@@ -219,14 +378,16 @@ function makeFolderDropTarget(header, childrenEl, node) {
     e.stopPropagation()
     clearDropMarkers()
 
-    // dragend fires before these awaits settle and clears dragNode, so hold a
+    // dragend fires before these awaits settle and clears dragIds, so hold a
     // local reference.
-    const moving = dragNode
-    if (await isSelfOrDescendant(moving.id, node.id)) {
-      showBanner("Can't move a folder inside itself.", "err")
-      return
+    const moving = dragIds.slice()
+    for (const id of moving) {
+      if (await isSelfOrDescendant(id, node.id)) {
+        showBanner("Can't move a folder inside itself.", "err")
+        return
+      }
     }
-    await applyMove(moving.id, { parentId: node.id })
+    await applyMoves(moving.map((id) => [id, { parentId: node.id }]))
 
     // A folder you just dropped into should show what landed in it.
     header.classList.remove("collapsed")
@@ -251,48 +412,75 @@ function makeContainerDropTarget(childrenEl, node) {
     e.preventDefault()
     e.stopPropagation()
     clearDropMarkers()
-    const moving = dragNode
-    if (await isSelfOrDescendant(moving.id, node.id)) {
-      showBanner("Can't move a folder inside itself.", "err")
-      return
+    const moving = dragIds.slice()
+    for (const id of moving) {
+      if (await isSelfOrDescendant(id, node.id)) {
+        showBanner("Can't move a folder inside itself.", "err")
+        return
+      }
     }
-    await applyMove(moving.id, { parentId: node.id })
+    await applyMoves(moving.map((id) => [id, { parentId: node.id }]))
   })
 }
 
-// Moves `node` to sit immediately before or after `target` among its siblings.
-async function moveRelativeTo(node, target, after) {
+// Moves `ids` to sit immediately before or after `target` among its siblings,
+// preserving their relative order.
+async function moveRelativeTo(ids, target, after) {
   const [fresh] = await browser.bookmarks.get(target.id)
   if (!fresh) return
 
-  if (await isSelfOrDescendant(node.id, fresh.parentId)) {
-    showBanner("Can't move a folder inside itself.", "err")
-    return
+  for (const id of ids) {
+    if (await isSelfOrDescendant(id, fresh.parentId)) {
+      showBanner("Can't move a folder inside itself.", "err")
+      return
+    }
   }
 
-  const [dragged] = await browser.bookmarks.get(node.id)
+  const dragged = []
+  for (const id of ids) {
+    const [n] = await browser.bookmarks.get(id)
+    if (n) dragged.push(n)
+  }
+
   let index = fresh.index + (after ? 1 : 0)
 
-  // Within one folder, removing the dragged node shifts every later sibling
-  // down by one, so a downward move needs its target index decremented.
-  if (dragged && dragged.parentId === fresh.parentId && dragged.index < fresh.index) {
-    index -= 1
-  }
+  // Within one folder, removing a dragged node shifts every later sibling down
+  // by one, so a downward move needs its target index decremented — once per
+  // node that sat above the target.
+  const above = dragged.filter(
+    (n) => n.parentId === fresh.parentId && n.index < fresh.index
+  ).length
+  index -= above
 
-  await applyMove(node.id, { parentId: fresh.parentId, index })
+  // Each successive node lands one slot further down, so the block keeps the
+  // order it had on screen.
+  await applyMoves(
+    dragged.map((n, i) => [n.id, { parentId: fresh.parentId, index: index + i }])
+  )
 }
 
-async function applyMove(id, destination) {
+// Applies [id, destination] pairs in order. Sequential, not parallel: each move
+// renumbers the siblings the next one is aimed at.
+async function applyMoves(moves) {
   clearBanner()
-  try {
-    await browser.bookmarks.move(id, destination)
-  } catch (err) {
-    showBanner(`Couldn't move bookmark: ${err.message}`, "err")
-    return
+  const failed = []
+  for (const [id, destination] of moves) {
+    try {
+      await browser.bookmarks.move(id, destination)
+    } catch (err) {
+      failed.push(err.message)
+    }
+  }
+  if (failed.length) {
+    showBanner(
+      moves.length === 1
+        ? `Couldn't move bookmark: ${failed[0]}`
+        : `Couldn't move ${failed.length} of ${moves.length} bookmarks: ${failed[0]}`,
+      "err"
+    )
   }
   // Indices are now stale everywhere; a re-render is simpler than patching.
-  await renderTree()
-  applyFilter()
+  await refreshAll()
 }
 
 function makeBookmarkRow(node) {
@@ -301,6 +489,7 @@ function makeBookmarkRow(node) {
   row.dataset.id = node.id
   makeDraggable(row, node)
   makeReorderTarget(row, node)
+  row.appendChild(makeRowCheckbox("bookmarks", node.id))
 
   const link = document.createElement("div")
   link.className = "bm-link"
@@ -347,6 +536,7 @@ function makeTabRow(tab) {
   const row = document.createElement("div")
   row.className = "bookmark-row"
   row.dataset.id = tab.id
+  row.appendChild(makeRowCheckbox("tabs", tab.id))
 
   const link = document.createElement("div")
   link.className = "bm-link"
@@ -661,6 +851,143 @@ async function closeTabOnly(tab, btn, siblingBtn, row) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Batch actions on the current selection
+//
+// Saves run one at a time rather than in parallel: Trilium's ETAPI is a single
+// server and a burst of note creations from a fifty-bookmark selection is a
+// worse neighbour than a short serial run. Each item is removed from Firefox
+// only after its own save succeeds, so a mid-batch failure never loses a
+// bookmark that never made it across.
+// ---------------------------------------------------------------------------
+
+// Resolves the selected ids back into the objects the save/remove calls need.
+// Ids that no longer exist are dropped silently — the row is already gone.
+async function resolveSelection() {
+  const ids = selectedNodeIds()
+  const items = []
+  for (const id of ids) {
+    try {
+      if (selectionKind === "tabs") {
+        const tab = await browser.tabs.get(Number(id))
+        if (tab) items.push({ id, title: tab.title, url: tab.url })
+      } else {
+        const [n] = await browser.bookmarks.get(id)
+        if (n && n.url) items.push({ id, title: n.title, url: n.url })
+      }
+    } catch {
+      // Gone since the page rendered; nothing to do.
+    }
+  }
+  return items
+}
+
+// Set while a batch runs. The bookmark/tab events it generates would otherwise
+// re-render the tree out from under the loop; both batch functions refresh once
+// at the end instead.
+let batchRunning = false
+
+function setBatchButtonsDisabled(disabled) {
+  batchRunning = disabled
+  selSaveBtn.disabled = disabled
+  selDeleteBtn.disabled = disabled
+  selClearBtn.disabled = disabled
+}
+
+async function removeSelectedItem(kind, id) {
+  if (kind === "tabs") await browser.tabs.remove(Number(id))
+  else await browser.bookmarks.remove(id)
+}
+
+async function saveSelection() {
+  clearBanner()
+  const kind = selectionKind
+  const items = await resolveSelection()
+  if (items.length === 0) return clearSelection()
+
+  setBatchButtonsDisabled(true)
+  let saved = 0
+  const failures = []
+
+  for (const item of items) {
+    selectionCountEl.textContent = `Saving ${saved + 1} of ${items.length}…`
+    try {
+      await saveUrlToInboxNote(item.title, item.url)
+    } catch (err) {
+      failures.push(`${item.title || item.url}: ${err.message}`)
+      continue
+    }
+    saved++
+    try {
+      await removeSelectedItem(kind, item.id)
+    } catch {
+      // Saved to Trilium but still present locally; the reported count below
+      // stays honest either way.
+    }
+    selectedIds.delete(item.id)
+  }
+
+  setBatchButtonsDisabled(false)
+  await refreshAll()
+
+  if (failures.length) {
+    showBanner(
+      `Saved ${saved} of ${items.length}. ${failures.length} failed — ${failures[0]}`,
+      "err"
+    )
+  } else {
+    showBanner(`Saved ${saved} ${saved === 1 ? "item" : "items"} to Trilium.`, "ok")
+  }
+}
+
+async function deleteSelection() {
+  clearBanner()
+  const kind = selectionKind
+  const items = await resolveSelection()
+  if (items.length === 0) return clearSelection()
+
+  if (kind === "bookmarks") {
+    const ok = window.confirm(
+      `Delete ${items.length} bookmark${items.length === 1 ? "" : "s"} from Firefox ` +
+      `without saving to Trilium?\n\nThis can't be undone from this page.`
+    )
+    if (!ok) return
+  }
+
+  setBatchButtonsDisabled(true)
+  let done = 0
+  const failures = []
+  for (const item of items) {
+    try {
+      await removeSelectedItem(kind, item.id)
+      done++
+      selectedIds.delete(item.id)
+    } catch (err) {
+      failures.push(err.message)
+    }
+  }
+
+  setBatchButtonsDisabled(false)
+  await refreshAll()
+
+  if (failures.length) {
+    showBanner(
+      `${kind === "tabs" ? "Closed" : "Deleted"} ${done} of ${items.length}. ` +
+      `${failures.length} failed — ${failures[0]}`,
+      "err"
+    )
+  }
+}
+
+selSaveBtn.addEventListener("click", saveSelection)
+selDeleteBtn.addEventListener("click", deleteSelection)
+selClearBtn.addEventListener("click", clearSelection)
+
+// Escape drops the selection — the usual way out of a selection mode.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && selectedIds.size > 0) clearSelection()
+})
+
 // Folders emptied by saving/deleting their last bookmark stay in the tree as
 // drop targets, but get marked so they render compactly.
 function pruneEmptyFolders() {
@@ -672,11 +999,97 @@ function pruneEmptyFolders() {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Refresh
+//
+// Re-renders both trees and restores the derived UI (filter, selection) that
+// the fresh DOM has lost. Everything that mutates bookmarks or tabs goes
+// through here rather than calling renderTree/renderTabs directly.
+// ---------------------------------------------------------------------------
+
+// A re-render replaces every row, so the scroll offset would otherwise snap
+// back to the top — jarring after a drop halfway down a long tree. Folder and
+// section expansion survive on their own via sectionState.
+function currentScroller() {
+  // The panel scrolls the document in the sidebar and the body element in a
+  // tab, depending on layout; whichever has the offset is the one to restore.
+  return document.scrollingElement || document.documentElement
+}
+
+async function refreshAll() {
+  const scroller = currentScroller()
+  const top = scroller.scrollTop
+  const left = scroller.scrollLeft
+
+  await renderTree()
+  await renderTabs()
+  applyFilter()
+  reconcileSelection()
+
+  // Restore after layout settles; a tree that got shorter clamps the offset to
+  // the new maximum on its own.
+  scroller.scrollTop = top
+  scroller.scrollLeft = left
+}
+
 document.getElementById("refresh").addEventListener("click", async () => {
   await loadConfig()
   checkSetup()
-  await renderTree()
-  await renderTabs()
+  await refreshAll()
+})
+
+// ---------------------------------------------------------------------------
+// Live updates
+//
+// Bookmarks changed in the Firefox library, and tabs opened or closed anywhere,
+// should show up here without a manual refresh. Events arrive in bursts (moving
+// a bookmark fires onMoved plus onChanged; restoring a window fires onCreated
+// per tab), so they're coalesced into one re-render on a short timer.
+//
+// A re-render mid-drag would pull the rows out from under the pointer, and one
+// mid-batch would fight the loop that's causing the events, so both suppress it
+// and refresh once they finish.
+// ---------------------------------------------------------------------------
+
+let refreshTimer = null
+
+function scheduleRefresh() {
+  if (dragNode || batchRunning) return
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null
+    if (dragNode || batchRunning) return
+    await refreshAll()
+  }, 250)
+}
+
+// Ignore tab events for pages we never list (about:, the panel itself) so
+// background noise doesn't cause pointless re-renders.
+function isListableTabUrl(url) {
+  if (!url) return false
+  if (url === browser.runtime.getURL("manage.html")) return false
+  return url.startsWith("http://") || url.startsWith("https://")
+}
+
+browser.bookmarks.onCreated.addListener(scheduleRefresh)
+browser.bookmarks.onRemoved.addListener(scheduleRefresh)
+browser.bookmarks.onChanged.addListener(scheduleRefresh)
+browser.bookmarks.onMoved.addListener(scheduleRefresh)
+
+browser.tabs.onCreated.addListener((tab) => {
+  // A brand-new tab often has no URL yet; onUpdated will follow with one.
+  if (!tab.url || isListableTabUrl(tab.url)) scheduleRefresh()
+})
+browser.tabs.onRemoved.addListener(scheduleRefresh)
+browser.tabs.onAttached.addListener(scheduleRefresh)
+browser.tabs.onDetached.addListener(scheduleRefresh)
+browser.tabs.onMoved.addListener(scheduleRefresh)
+
+// Only title/URL changes affect what's rendered; audible, favicon and loading
+// churn would otherwise re-render on every page load.
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.title === undefined && changeInfo.url === undefined) return
+  if (isListableTabUrl(tab.url)) scheduleRefresh()
 })
 
 // Keep the panel in sync when profiles are edited in the Settings tab, or when
@@ -731,6 +1144,5 @@ searchEl.addEventListener("input", applyFilter);
   setupSection("tabsSection", tabsTreeEl, "tabs")
   setupSection("bookmarksSection", treeEl, "bookmarks")
   checkSetup()
-  await renderTree()
-  await renderTabs()
+  await refreshAll()
 })()
