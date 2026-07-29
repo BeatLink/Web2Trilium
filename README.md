@@ -45,9 +45,12 @@ or load it temporarily for development:
   pages (`about:blank`, `about:newtab`, etc.) are excluded.
 - **The toolbar icon** focuses the existing Web2Trilium tab if one is already
   open; it only opens a new tab if none exists.
-- **Folder cleanup**: empty folders are removed from the list after you move
-  or delete their last bookmark, including nested empty parent folders. The
-  underlying Firefox folder structure is left untouched.
+- **Drag and drop**: bookmarks and folders can be dragged within the tree.
+  Drop onto the top or bottom half of a row to place an item before or after
+  it, or onto a folder header to file it inside. Moves are written back to
+  Firefox via `browser.bookmarks.move()`. Open tabs are not draggable.
+- **Empty folders** stay in the list rather than disappearing, so they remain
+  available as drop targets. They're hidden while a search filter is active.
 - **Permissions**: `bookmarks`, `tabs`, `storage`, and localhost access.
   The `tabs` permission is used only to read tab title/URL and close tabs.
 

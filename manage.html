@@ -11,6 +11,7 @@
   <header>
     <h1>Web2Trilium</h1>
     <div class="top-actions">
+      <select id="profileSelect" title="Trilium profile to save into"></select>
       <button id="refresh">Refresh</button>
       <button id="toggleSidebar">Open in Sidebar</button>
       <button id="openOptions">Settings</button>
@@ -21,13 +22,14 @@
 
   <div id="banner"></div>
 
-  <h2 class="section-title">Open Tabs</h2>
+  <h2 class="section-title" id="tabsSection">Open Tabs</h2>
   <div id="tabsTree"></div>
 
-  <h2 class="section-title">Bookmarks</h2>
+  <h2 class="section-title" id="bookmarksSection">Bookmarks</h2>
   <div id="tree"></div>
 
   <script src="trilium-api.js"></script>
+  <script src="profiles.js"></script>
   <script src="manage.js"></script>
 </body>
 

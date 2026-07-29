@@ -10,6 +10,18 @@
 <body>
   <h1>Trilium Inbox Saver — Settings</h1>
 
+  <label for="profileSelect">Profile</label>
+  <div class="profile-bar">
+    <select id="profileSelect"></select>
+    <button id="newProfile" class="secondary small">New</button>
+    <button id="renameProfile" class="secondary small">Rename</button>
+    <button id="deleteProfile" class="secondary small">Delete</button>
+  </div>
+  <div class="hint">
+    Each profile has its own server URL, ETAPI token, and inbox note. The profile selected
+    here is the one new saves go to; you can also switch profiles from the Web2Trilium panel.
+  </div>
+
   <label for="baseUrl">Trilium server URL</label>
   <input type="text" id="baseUrl" placeholder="http://localhost:37840" />
   <div class="hint">Default for Trilium Desktop is http://localhost:37840</div>
@@ -35,6 +47,7 @@
   <div id="status"></div>
 
   <script src="trilium-api.js"></script>
+  <script src="profiles.js"></script>
   <script src="options.js"></script>
 </body>
 
