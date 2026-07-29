@@ -589,9 +589,53 @@ function makeFolderNode(node) {
   twisty.className = "twisty"
   twisty.textContent = "▾"
   const folderTitle = document.createElement("span")
+  folderTitle.className = "folder-title"
   folderTitle.textContent = node.title || "(unnamed)"
   header.appendChild(twisty)
   header.appendChild(folderTitle)
+
+  // Folder-level actions, mirroring a bookmark row's. Roots (Bookmarks Toolbar,
+  // Bookmarks Menu, Other Bookmarks) can't be removed by the bookmarks API, so
+  // offering to save or delete them would only produce an error.
+  const isRoot = !node.parentId || node.parentId === "root________"
+  if (!isRoot) {
+    const folderActions = document.createElement("div")
+    folderActions.className = "bm-actions folder-actions"
+
+    const saveBtn = document.createElement("button")
+    saveBtn.className = "save-btn"
+    saveBtn.textContent = "Save folder"
+    saveBtn.title =
+      "Create a note for this folder in Trilium, with its bookmarks as child notes"
+
+    const deleteBtn = document.createElement("button")
+    deleteBtn.className = "delete-btn"
+    deleteBtn.textContent = "Delete"
+    deleteBtn.title = "Delete this folder and everything in it, without saving to Trilium"
+
+    // The header itself toggles collapse; without this a click on either button
+    // would also fold the folder shut.
+    saveBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      saveFolderAndRemove(node, saveBtn, deleteBtn)
+    })
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation()
+      deleteFolderOnly(node, deleteBtn, saveBtn)
+    })
+
+    // The header is a drag source; without this the buttons inside it start a
+    // folder drag instead of registering a press.
+    folderActions.draggable = true
+    folderActions.addEventListener("dragstart", (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    })
+
+    folderActions.appendChild(saveBtn)
+    folderActions.appendChild(deleteBtn)
+    header.appendChild(folderActions)
+  }
 
   const childrenEl = document.createElement("div")
   childrenEl.className = "folder-children"
@@ -721,15 +765,21 @@ function applyFilter() {
 // Throws on failure (config missing, request failure, etc). Shared by both
 // the bookmark-saving and tab-saving flows.
 async function saveUrlToInboxNote(title, url) {
-  if (!config.token || !config.baseUrl) {
-    throw new Error("Set up your Trilium server URL and ETAPI token in Settings first.")
-  }
   if (!config.inboxNoteId) {
     throw new Error("Set your Trilium Inbox note ID in Settings first.")
   }
+  return saveUrlToNote(config.inboxNoteId, title, url)
+}
+
+// Creates the Web View note under an arbitrary parent. Folder saves point this
+// at the note standing in for the folder rather than at the Inbox.
+async function saveUrlToNote(parentNoteId, title, url) {
+  if (!config.token || !config.baseUrl) {
+    throw new Error("Set up your Trilium server URL and ETAPI token in Settings first.")
+  }
 
   const note = await client.createNote({
-    parentNoteId: config.inboxNoteId,
+    parentNoteId,
     title: title || url,
     type: "webView",
     content: "",
@@ -738,6 +788,142 @@ async function saveUrlToInboxNote(title, url) {
   await client.createAttribute({ noteId, type: "label", name: "webViewSrc", value: url })
   await client.createAttribute({ noteId, type: "label", name: "url", value: url })
   return noteId
+}
+
+// ---------------------------------------------------------------------------
+// Folders
+//
+// A bookmark folder becomes a plain text note in Trilium, and everything under
+// it is recreated beneath that note — bookmarks as the same webView notes a
+// single save produces, subfolders as further text notes. The Firefox hierarchy
+// is mirrored rather than flattened, so a folder tree arrives intact.
+//
+// Nothing is removed from Firefox until the whole subtree has been written, so
+// a failure halfway through leaves the original bookmarks untouched and the
+// operation can simply be retried.
+// ---------------------------------------------------------------------------
+
+// Creates `node`'s subtree under the Trilium note `parentNoteId`. Returns the
+// number of bookmarks written. Throws on the first failure — the caller treats
+// a partial write as a failed save and leaves Firefox alone.
+async function saveFolderSubtree(node, parentNoteId, onProgress) {
+  const note = await client.createNote({
+    parentNoteId,
+    title: node.title || "(unnamed folder)",
+    type: "text",
+    content: "",
+  })
+  const folderNoteId = note.note.noteId
+
+  let saved = 0
+  for (const child of node.children || []) {
+    if (child.type === "separator") continue
+    if (child.url) {
+      await saveUrlToNote(folderNoteId, child.title, child.url)
+      saved++
+      if (onProgress) onProgress(saved)
+    } else if (child.children) {
+      saved += await saveFolderSubtree(child, folderNoteId, (n) => {
+        if (onProgress) onProgress(saved + n)
+      })
+    }
+  }
+  return saved
+}
+
+// Counts the bookmarks in a subtree, for confirmation prompts and progress.
+function countBookmarks(node) {
+  let n = 0
+  for (const child of node.children || []) {
+    if (child.url) n++
+    else if (child.children) n += countBookmarks(child)
+  }
+  return n
+}
+
+async function saveFolderAndRemove(node, btn, siblingBtn) {
+  clearBanner()
+
+  if (!config.token || !config.baseUrl || !config.inboxNoteId) {
+    showBanner("Finish Trilium setup in Settings before saving folders.", "err")
+    return
+  }
+
+  const total = countBookmarks(node)
+  const label = node.title || "(unnamed folder)"
+  if (total === 0) {
+    showBanner(`"${label}" has no bookmarks in it.`, "warn")
+    return
+  }
+
+  const ok = window.confirm(
+    `Save "${label}" and its ${total} bookmark${total === 1 ? "" : "s"} to Trilium, ` +
+    `then remove the folder from Firefox?`
+  )
+  if (!ok) return
+
+  btn.disabled = true
+  siblingBtn.disabled = true
+  btn.classList.remove("fail")
+  btn.textContent = "Saving…"
+  batchRunning = true
+
+  try {
+    await saveFolderSubtree(node, config.inboxNoteId, (n) => {
+      btn.textContent = `Saving ${n}/${total}…`
+    })
+  } catch (err) {
+    batchRunning = false
+    btn.disabled = false
+    siblingBtn.disabled = false
+    btn.textContent = "Retry"
+    btn.classList.add("fail")
+    // Nothing was removed from Firefox, so a retry is safe — though it will
+    // create a second copy of whatever did land in Trilium.
+    showBanner(
+      `Failed to save "${label}": ${err.message}. Nothing was removed from Firefox.`,
+      "err"
+    )
+    return
+  }
+
+  try {
+    await browser.bookmarks.removeTree(node.id)
+  } catch (err) {
+    showBanner(`Saved to Trilium, but couldn't remove the folder: ${err.message}`, "warn")
+  }
+
+  batchRunning = false
+  await refreshAll()
+  showBanner(`Saved "${label}" (${total} bookmark${total === 1 ? "" : "s"}) to Trilium.`, "ok")
+}
+
+async function deleteFolderOnly(node, btn, siblingBtn) {
+  clearBanner()
+
+  const total = countBookmarks(node)
+  const label = node.title || "(unnamed folder)"
+  const ok = window.confirm(
+    `Delete the folder "${label}" and everything in it ` +
+    `(${total} bookmark${total === 1 ? "" : "s"}) from Firefox without saving to Trilium?` +
+    `\n\nThis can't be undone from this page.`
+  )
+  if (!ok) return
+
+  btn.disabled = true
+  siblingBtn.disabled = true
+  btn.textContent = "Deleting…"
+
+  try {
+    await browser.bookmarks.removeTree(node.id)
+  } catch (err) {
+    btn.disabled = false
+    siblingBtn.disabled = false
+    btn.textContent = "Delete"
+    showBanner(`Failed to delete "${label}": ${err.message}`, "err")
+    return
+  }
+  await refreshAll()
 }
 
 async function saveBookmarkAndRemove(node, btn, siblingBtn, row) {

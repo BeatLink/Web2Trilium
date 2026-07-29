@@ -167,6 +167,27 @@ h1 {
     color: #000;
 }
 
+/* Let a long folder name ellipsize instead of shoving the action buttons off
+   the edge of a narrow sidebar. */
+.folder-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Folder actions follow the same hover-reveal rule as bookmark-row actions;
+   .bm-actions supplies that, this only handles placement. */
+.folder-actions {
+    margin-left: auto;
+}
+
+.folder-header:hover .folder-actions,
+.folder-header:focus-within .folder-actions {
+    display: flex;
+}
+
 .folder-header .twisty {
     width: 12px;
     flex-shrink: 0;
@@ -411,7 +432,10 @@ h1 {
         text-overflow: ellipsis;
     }
 
-    .bm-actions { display: flex; gap: 6px; }
+    /* Bookmark rows show their actions permanently at this width; folder
+       actions stay hover-revealed so headers don't turn into button bars. */
+    .bookmark-row .bm-actions { display: flex; gap: 6px; }
+    .folder-actions { gap: 6px; }
 
     .save-btn,
     .delete-btn {
